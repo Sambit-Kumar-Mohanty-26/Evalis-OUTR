@@ -4,5 +4,61 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+model Tenant {
+  id            String         @id @default(cuid())
+  name          String
+  isDeleted     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  users         User[]
+  refreshTokens RefreshToken[]
+}
+
+model User {
+  id                  String         @id @default(cuid())
+  email               String         @unique
+  fullName            String
+  phoneNumber         String?
+  passwordHash        String
+  role                Role           @default(STUDENT)
+  tenantId            String
+  tenant              Tenant         @relation(fields: [tenantId], references: [id])
+  onboardingRequired  Boolean        @default(false)
+  isDeleted           Boolean        @default(false)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  refreshTokens       RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+model OtpVerification {
+  id           String   @id @default(cuid())
+  email        String
+  otpHash      String
+  isUsed       Boolean  @default(false)
+  expiresAt    DateTime
+  attemptCount Int      @default(0)
+  lastSentAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
 }

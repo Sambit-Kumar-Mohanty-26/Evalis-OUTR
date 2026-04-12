@@ -16,8 +16,11 @@ interface AuthContextType {
     accessToken: string | null;
     isLoading: boolean;
     login: (email: string, password: string) => Promise<void>;
+    onboard: (data: any) => Promise<void>;
     logout: () => Promise<void>;
     isAuthenticated: boolean;
+    sendOtp: (email: string) => Promise<void>;
+    verifyOtp: (email: string, otp: string) => Promise<string>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -28,24 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        const stored = localStorage.getItem("evalis_access_token");
-        const storedUser = localStorage.getItem("evalis_user");
-        if (stored && storedUser) {
-            setAccessToken(stored);
-            setUser(JSON.parse(storedUser));
-        }
-        setIsLoading(false);
-    }, []);
-
     const refreshAccessToken = useCallback(async (): Promise<string | null> => {
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/v1/auth/refresh`, {
-                method: "POST",
-                credentials: "include",
-            });
-            if (!res.ok) throw new Error("Refresh failed");
-            const data = await res.json();
+            const data = await api.post("/api/v1/auth/refresh");
             setAccessToken(data.accessToken);
             localStorage.setItem("evalis_access_token", data.accessToken);
             return data.accessToken;
@@ -58,16 +46,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    const login = useCallback(async (email: string, password: string) => {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/v1/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ email, password }),
-        });
+    useEffect(() => {
+        const stored = localStorage.getItem("evalis_access_token");
+        const storedUser = localStorage.getItem("evalis_user");
+        if (stored && storedUser) {
+            setAccessToken(stored);
+            setUser(JSON.parse(storedUser));
+        }
+        setIsLoading(false);
+    }, []);
 
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Login failed");
+    const login = useCallback(async (email: string, password: string) => {
+        const data = await api.post("/api/v1/auth/login", { email, password });
 
         const userData: User = {
             id: data.user.id,
@@ -95,12 +85,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [router]);
 
+    const onboard = useCallback(async (onboardingData: any) => {
+        await api.post("/api/v1/auth/onboard", onboardingData);
+        // After successful onboarding, we don't log them in automatically 
+        // because we want them to go through the official login flow to establish cookies/tokens
+        router.push("/login?message=Account specialized. Please calibrate credentials.");
+    }, [router]);
+
+    const sendOtp = useCallback(async (email: string) => {
+        await api.post("/api/v1/auth/send-otp", { email });
+    }, []);
+
+    const verifyOtp = useCallback(async (email: string, otp: string): Promise<string> => {
+        const data = await api.post("/api/v1/auth/verify-otp", { email, otp });
+        return data.preAuthToken;
+    }, []);
+
     const logout = useCallback(async () => {
         try {
-            await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/v1/auth/logout`, {
-                method: "POST",
-                credentials: "include",
-            });
+            await api.post("/api/v1/auth/logout");
         } catch { }
         setUser(null);
         setAccessToken(null);
@@ -115,7 +118,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [accessToken, refreshAccessToken]);
 
     return (
-        <AuthContext.Provider value={{ user, accessToken, isLoading, login, logout, isAuthenticated: !!user }}>
+        <AuthContext.Provider value={{ 
+            user, 
+            accessToken, 
+            isLoading, 
+            login, 
+            onboard, 
+            logout, 
+            isAuthenticated: !!user,
+            sendOtp,
+            verifyOtp
+        }}>
             {children}
         </AuthContext.Provider>
     );
