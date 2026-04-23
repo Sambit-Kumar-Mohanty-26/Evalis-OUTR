@@ -5,6 +5,12 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import authRoutes from './routes/authRoutes';
+import orgRoutes from './routes/orgRoutes';
+import academicRoutes from './routes/academicRoutes';
+import adminRoutes from './routes/adminRoutes';
+import userRoutes from './routes/userRoutes';
+import batchRoutes from './routes/batchRoutes';
+import examRoutes from './routes/examRoutes';
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
@@ -29,6 +35,12 @@ app.use('/api/', limiter);
 
 // Routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/org', orgRoutes);
+app.use('/api/v1/academic', academicRoutes);
+app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/user', userRoutes);
+app.use('/api/v1/batch', batchRoutes);
+app.use('/api/v1/exam', examRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'Evalis Core', timestamp: new Date().toISOString() });

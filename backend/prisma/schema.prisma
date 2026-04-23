@@ -8,34 +8,425 @@ datasource db {
 
 enum Role {
   ADMIN
+  HEAD_OF_SCHOOL
+  ADVISOR
   TEACHER
   STUDENT
 }
 
-model Tenant {
-  id            String         @id @default(cuid())
-  name          String
-  isDeleted     Boolean        @default(false)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  users         User[]
-  refreshTokens RefreshToken[]
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
 }
 
+enum BatchStatus {
+  ONGOING
+  PASSED
+}
+
+enum SemesterTimelineStatus {
+  PENDING
+  ONGOING
+  COMPLETED
+}
+
+enum ExamStatus {
+  DRAFT
+  ACTIVE
+  LOCKED
+}
+
+enum ResultStatus {
+  PASSED
+  FAILED
+  BACKLOG
+  CLEARED
+}
+
+enum PromotionOutcome {
+  P   // Passed
+  XP  // Promoted with backlog
+  X   // Not promoted (repeat year)
+}
+
+model Tenant {
+  id            String             @id @default(cuid())
+  name          String
+  isDeleted     Boolean            @default(false)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  users         User[]
+  refreshTokens RefreshToken[]
+  orgNodes      OrganizationNode[]
+  academicYears AcademicYear[]
+  blueprintVersions AcademicVersion[]
+  examSchemas   ExamSchema[]
+}
+
+model OrganizationNode {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   @default("CUSTOM")
+  level       Int      @default(0)
+  order       Int      @default(0)
+  isCollapsed Boolean  @default(false)
+  parentId    String?
+  parent      OrganizationNode?  @relation("NodeHierarchy", fields: [parentId], references: [id])
+  children    OrganizationNode[] @relation("NodeHierarchy")
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  admins      User[]   @relation("NodeAdmin")
+  programs    Program[]
+  schools     AcademicSchool[]
+  branches    Branch[]
+  isDeleted   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AcademicVersion {
+  id        String    @id @default(cuid())
+  name      String    // e.g., "R24 Syllabus"
+  isCurrent Boolean   @default(false)
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  programs  Program[]
+  isDeleted Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  name      String   // e.g., "2024-2025"
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  batches   Batch[]
+  createdAt DateTime @default(now())
+}
+
+model Program {
+  id                 String   @id @default(cuid())
+  name               String   // e.g., "B.Tech", "MCA" (Represents 'Course')
+  durationYears      Int      @default(4)
+  versionId          String
+  version            AcademicVersion @relation(fields: [versionId], references: [id])
+  schools            AcademicSchool[]
+  orgNodeId          String?  // Link to Organization Level 1 (Course/Program)
+  orgNode            OrganizationNode? @relation(fields: [orgNodeId], references: [id])
+  isDeleted          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+}
+
+model AcademicSchool {
+  id        String   @id @default(cuid())
+  name      String   // e.g., "School of Engineering"
+  programId String
+  program   Program  @relation(fields: [programId], references: [id])
+  branches  Branch[]
+  orgNodeId String?  // Link to Organization Level 2 (School)
+  orgNode   OrganizationNode? @relation(fields: [orgNodeId], references: [id])
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String   // e.g., "CSE", "IT"
+  schoolId  String
+  school    AcademicSchool @relation(fields: [schoolId], references: [id])
+  orgNodeId String?  // Link to Organization Level 3 (Branch/Dept)
+  orgNode   OrganizationNode? @relation(fields: [orgNodeId], references: [id])
+  semesters Semester[]
+  batches   Batch[]
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Semester {
+  id             String    @id @default(cuid())
+  semesterNumber Int
+  branchId       String
+  branch         Branch    @relation(fields: [branchId], references: [id])
+  subjects       Subject[]
+  createdAt      DateTime  @default(now())
+}
+
+model Subject {
+  id            String       @id @default(cuid())
+  name          String
+  code          String
+  creditHours   Int          @default(3)
+  maxMarks      Int          @default(100)
+  passMarks     Int          @default(35)    // Configurable per subject (Theory=35, Lab=51)
+  type          String       @default("THEORY") // THEORY, LAB, ELECTIVE
+  semesterId    String
+  semester      Semester     @relation(fields: [semesterId], references: [id])
+  teacherId     String?
+  teacher       User?        @relation("SubjectTeacher", fields: [teacherId], references: [id])
+  examSchemaId  String?
+  examSchema    ExamSchema?  @relation("SubjectExamSchema", fields: [examSchemaId], references: [id])
+  marks         StudentMark[]
+  results       StudentResult[]
+  backlogs      StudentBacklog[]
+  isDeleted     Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+}
+
+// ─── BATCH AUTOMATION ENGINE ─────────────────────────────────────────────────
+
+model Batch {
+  id              String       @id @default(cuid())
+  name            String       // e.g., "B.Tech CSE 2023–2027"
+  startYear       Int          @default(2024)
+  endYear         Int          @default(2028)
+  totalSemesters  Int          @default(8)
+  currentSemester Int          @default(1)
+  status          BatchStatus  @default(ONGOING)
+  autoPromote     Boolean      @default(false)
+  isLocked        Boolean      @default(false)
+
+  branchId        String
+  branch          Branch       @relation(fields: [branchId], references: [id])
+  academicYearId  String
+  academicYear    AcademicYear @relation(fields: [academicYearId], references: [id])
+  students        User[]       @relation("BatchStudents")
+
+  semesterTimelines BatchSemester[]
+  examInstances     ExamInstance[]
+
+  isDeleted       Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @default(now()) @updatedAt
+}
+
+model BatchSemester {
+  id              String                @id @default(cuid())
+  semesterNumber  Int
+  startDate       DateTime
+  endDate         DateTime
+  status          SemesterTimelineStatus @default(PENDING)
+
+  batchId         String
+  batch           Batch                 @relation(fields: [batchId], references: [id])
+
+  promotionLogs   PromotionLog[]
+
+  createdAt       DateTime              @default(now())
+
+  @@unique([batchId, semesterNumber])
+}
+
+model PromotionLog {
+  id              String           @id @default(cuid())
+  studentId       String
+  student         User             @relation(fields: [studentId], references: [id])
+  batchSemesterId String
+  batchSemester   BatchSemester    @relation(fields: [batchSemesterId], references: [id])
+
+  fromSemester    Int
+  toSemester      Int?
+  outcome         PromotionOutcome
+  cgpa            Float?
+  remarks         String?          // e.g., "CGPA below 4.5 — Year Back"
+
+  promotedAt      DateTime         @default(now())
+  promotedBy      String?          // Admin who triggered
+}
+
+// EXAM EVALUATION ENGINE
+
+model ExamSchema {
+  id          String          @id @default(cuid())
+  name        String          // e.g., "Theory Evaluation", "Lab Evaluation"
+  type        String          @default("THEORY") // THEORY, LAB
+  totalMarks  Int             @default(100)
+
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+
+  components  ExamComponent[]
+  subjects    Subject[]       @relation("SubjectExamSchema")
+
+  isDeleted   Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+}
+
+model ExamComponent {
+  id          String     @id @default(cuid())
+  name        String     // e.g., "Attendance", "Mid Sem", "End Sem"
+  maxMarks    Int
+  category    String     @default("INTERNAL") // INTERNAL, EXTERNAL
+  order       Int        @default(0)
+
+  schemaId    String
+  schema      ExamSchema @relation(fields: [schemaId], references: [id])
+
+  marks       StudentMark[]
+}
+
+model ExamInstance {
+  id            String     @id @default(cuid())
+  name          String     // e.g., "Mid Sem Oct 2024"
+  type          String     @default("REGULAR") // REGULAR, BACK_PAPER
+  status        ExamStatus @default(DRAFT)
+
+  batchId       String
+  batch         Batch      @relation(fields: [batchId], references: [id])
+  semester      Int        // Which semester this exam covers
+
+  scheduledDate DateTime?
+  lockedAt      DateTime?
+  lockedBy      String?
+
+  marks         StudentMark[]
+  results       StudentResult[]
+
+  isDeleted     Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+}
+
+//MARKS & RESULTS
+
+model StudentMark {
+  id              String        @id @default(cuid())
+  marksObtained   Float
+
+  studentId       String
+  student         User          @relation(fields: [studentId], references: [id])
+  subjectId       String
+  subject         Subject       @relation(fields: [subjectId], references: [id])
+  componentId     String
+  component       ExamComponent @relation(fields: [componentId], references: [id])
+  examInstanceId  String
+  examInstance    ExamInstance   @relation(fields: [examInstanceId], references: [id])
+
+  isBacklog       Boolean       @default(false)
+  enteredBy       String?       // Teacher ID
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([studentId, subjectId, componentId, examInstanceId])
+}
+
+model StudentResult {
+  id              String       @id @default(cuid())
+
+  studentId       String
+  student         User         @relation(fields: [studentId], references: [id])
+  subjectId       String
+  subject         Subject      @relation(fields: [subjectId], references: [id])
+  examInstanceId  String
+  examInstance    ExamInstance  @relation(fields: [examInstanceId], references: [id])
+
+  totalMarks      Float
+  gradePoint      Float?       // 10, 9, 8, 7, 6, 5, 2
+  grade           String?      // O, A, B, C, D, P, F
+  creditPoints    Float?       // gradePoint × creditHours
+  status          ResultStatus @default(FAILED)
+
+  originalMarks   Float?       // Preserved if back paper clears
+  isPublished     Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([studentId, subjectId, examInstanceId])
+}
+
+model SemesterResult {
+  id              String   @id @default(cuid())
+
+  studentId       String
+  student         User     @relation(fields: [studentId], references: [id])
+  semesterNumber  Int
+  batchId         String
+
+  sgpa            Float
+  totalCredits    Int
+  totalCreditPoints Float
+  backlogs        Int      @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([studentId, semesterNumber, batchId])
+}
+
+model StudentBacklog {
+  id              String   @id @default(cuid())
+
+  studentId       String
+  student         User     @relation("StudentBacklogs", fields: [studentId], references: [id])
+  subjectId       String
+  subject         Subject  @relation(fields: [subjectId], references: [id])
+
+  semesterNumber  Int
+  attempts        Int      @default(1)
+  status          String   @default("ACTIVE") // ACTIVE, CLEARED
+
+  clearedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([studentId, subjectId])
+}
+
+// USER
+
 model User {
-  id                  String         @id @default(cuid())
-  email               String         @unique
-  fullName            String
-  phoneNumber         String?
-  passwordHash        String
-  role                Role           @default(STUDENT)
-  tenantId            String
-  tenant              Tenant         @relation(fields: [tenantId], references: [id])
-  onboardingRequired  Boolean        @default(false)
-  isDeleted           Boolean        @default(false)
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  refreshTokens       RefreshToken[]
+  id                    String         @id @default(cuid())
+  email                 String         @unique
+  fullName              String
+  phoneNumber           String?
+  passwordHash          String
+  role                  Role           @default(STUDENT)
+  tenantId              String
+  tenant                Tenant         @relation(fields: [tenantId], references: [id])
+  onboardingRequired    Boolean        @default(false)
+  rollNumber            String?
+  status                String         @default("ACTIVE") // ACTIVE, GRADUATED, DROPPED
+  currentSemester       Int?           @default(1)
+  cgpa                  Float?         // Cumulative GPA across all semesters
+  attendancePercentage  Float?         // Placeholder for attendance gate (≥60%)
+  
+  // Relations for Org & Academic
+  managedNodes          OrganizationNode[] @relation("NodeAdmin")
+  taughtSubjects        Subject[]      @relation("SubjectTeacher")
+  batchId               String?
+  batch                 Batch?         @relation("BatchStudents", fields: [batchId], references: [id])
+  
+  // Marks & Results
+  marks                 StudentMark[]
+  results               StudentResult[]
+  semesterResults       SemesterResult[]
+  promotionLogs         PromotionLog[]
+  backlogs              StudentBacklog[] @relation("StudentBacklogs")
+
+  auditLogs             AuditLog[]
+  isDeleted             Boolean        @default(false)
+  metadata              Json?          // Stores primary roles (e.g. primaryAdvisorNodeId)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  refreshTokens         RefreshToken[]
+}
+
+// SYSTEM MODELS 
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  action    AuditAction
+  entity    String      // e.g., "Subject", "User"
+  entityId  String
+  metadata  Json?       // Store full object or diff
+  ipAddress String?
+  timestamp DateTime    @default(now())
 }
 
 model RefreshToken {

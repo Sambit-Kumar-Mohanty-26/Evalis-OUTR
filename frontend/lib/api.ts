@@ -53,7 +53,8 @@ class ApiClient {
 
         if (!res.ok) {
             const err = await res.json().catch(() => ({ error: "Request failed" }));
-            throw new Error(err.error || `HTTP ${res.status}`);
+            const message = err.details || err.error || `HTTP ${res.status}`;
+            throw new Error(message);
         }
 
         return res.json();
@@ -79,6 +80,46 @@ class ApiClient {
 
     delete<T = any>(endpoint: string) {
         return this.request<T>(endpoint, { method: "DELETE" });
+    }
+
+    async upload<T = any>(endpoint: string, formData: FormData): Promise<T> {
+        const token = authHelpers.getToken();
+
+        const res = await fetch(`${API_BASE}${endpoint}`, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: formData,
+        });
+
+        if (res.status === 401) {
+            const newToken = await authHelpers.refreshToken();
+            if (newToken) {
+                const retryRes = await fetch(`${API_BASE}${endpoint}`, {
+                    method: "POST",
+                    credentials: "include",
+                    headers: {
+                        Authorization: `Bearer ${newToken}`,
+                    },
+                    body: formData,
+                });
+                if (!retryRes.ok) {
+                    const err = await retryRes.json().catch(() => ({ error: "Upload failed" }));
+                    throw new Error(err.error || `HTTP ${retryRes.status}`);
+                }
+                return retryRes.json();
+            }
+            throw new Error("Session expired. Please log in again.");
+        }
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: "Upload failed" }));
+            throw new Error(err.details || err.error || `HTTP ${res.status}`);
+        }
+
+        return res.json();
     }
 }
 

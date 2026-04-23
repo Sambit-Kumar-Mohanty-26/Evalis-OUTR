@@ -74,13 +74,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Role-based redirect
         switch (userData.role) {
             case "ADMIN":
-                router.push("/dashboard/admin");
-                break;
             case "TEACHER":
-                router.push("/dashboard/teacher");
-                break;
             case "STUDENT":
-                router.push("/dashboard/student");
+                router.push("/dashboard");
                 break;
         }
     }, [router]);

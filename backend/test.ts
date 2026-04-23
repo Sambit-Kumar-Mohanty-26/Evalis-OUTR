@@ -1,0 +1,1 @@
+import { db } from './src/config/db'; async function run() { const b = await db.batch.findMany({include:{branch:{include:{school:{include:{program:true}}}}}}); console.log(JSON.stringify(b.map(x=> ({id: x.id, name: x.name, branch: x.branch.name, school: x.branch.school.name, program: x.branch.school.program.name})), null, 2)); } run().finally(() => db.$disconnect());

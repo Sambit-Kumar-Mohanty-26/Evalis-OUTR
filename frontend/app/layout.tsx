@@ -3,6 +3,7 @@ import { Inter, Playfair_Display, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { SmoothScroll } from "@/components/ui/SmoothScroll";
+import { Toaster } from "sonner";
 
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -34,6 +35,7 @@ export default function RootLayout({
         <div className="noise-overlay" />
         <AuthProvider>
           {children}
+          <Toaster richColors position="top-right" />
         </AuthProvider>
       </body>
     </html>

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db } from '../config/db';
+import { db } from '../../config/db';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import emailjs from '@emailjs/nodejs';
