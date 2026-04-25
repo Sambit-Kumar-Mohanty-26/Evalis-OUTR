@@ -13,7 +13,7 @@ export const getBatches = async (req: AuthRequest, res: Response): Promise<void>
         const batches = await db.batch.findMany({
             where: {
                 isDeleted: false,
-                branch: { school: { program: { version: { tenantId, isCurrent: true } } } }
+                academicYear: { tenantId }
             },
             include: {
                 branch: {
@@ -110,7 +110,7 @@ export const createBatch = async (req: AuthRequest, res: Response): Promise<void
         const durationYears = program.durationYears;
         const endYear = startYear + durationYears;
         const totalSemesters = durationYears * 2;
-        const batchName = `${program.name} ${branch.name} ${startYear}–${endYear}`;
+        const batchName = `${startYear}-${endYear}`;
 
         // Get or create AcademicYear
         let acYear = await db.academicYear.findFirst({

@@ -15,6 +15,7 @@ export interface OrgNode {
   level: number;
   collapsed: boolean;
   order: number;
+  durationYears?: number;
 }
 
 export interface HierarchyFlowProps {
@@ -43,11 +44,12 @@ interface TreeNodeProps {
   onAdd: (parentId: string) => void;
   onRemove: (id: string) => void;
   onRename: (id: string, name: string) => void;
+  onDurationChange: (id: string, duration: number) => void;
   onTypeChange: (id: string, type: string) => void;
   onToggle: (id: string) => void;
 }
 
-function TreeNodeItem({ node, allNodes, isLast, onAdd, onRemove, onRename, onTypeChange, onToggle }: TreeNodeProps) {
+function TreeNodeItem({ node, allNodes, isLast, onAdd, onRemove, onRename, onDurationChange, onTypeChange, onToggle }: TreeNodeProps) {
   const [editing, setEditing] = useState(false);
   const [editingType, setEditingType] = useState(false);
   const [nameVal, setNameVal] = useState(node.name);
@@ -186,6 +188,20 @@ function TreeNodeItem({ node, allNodes, isLast, onAdd, onRemove, onRename, onTyp
             )}
           </div>
 
+          {node.level === 1 && (
+              <div className="flex items-center gap-2 bg-[#1C1C1A]/5 px-3 py-1.5 rounded-xl border border-black/5 group-hover:border-brand-green/20 transition-all">
+                   <input 
+                      type="number" 
+                      value={node.durationYears || 4} 
+                      min={1} max={10}
+                      onChange={(e) => { e.stopPropagation(); onDurationChange(node.id, parseInt(e.target.value) || 1); }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-8 bg-transparent border-none outline-none text-[11px] font-black text-center text-brand-green"
+                   />
+                   <span className="text-[8px] font-black uppercase tracking-widest text-[#1C1C1A]/30">Yrs</span>
+              </div>
+          )}
+
           {hasChildren && (
             <div className={cn("px-2.5 py-0.5 rounded-full text-[9px] font-black font-sans shrink-0", theme.badge)}>
               {children.length}
@@ -244,6 +260,7 @@ function TreeNodeItem({ node, allNodes, isLast, onAdd, onRemove, onRename, onTyp
                     onAdd={onAdd}
                     onRemove={onRemove}
                     onRename={onRename}
+                    onDurationChange={onDurationChange}
                     onTypeChange={onTypeChange}
                     onToggle={onToggle}
                   />
@@ -303,6 +320,10 @@ export function HierarchyFlow({ nodes, onNodesChange }: HierarchyFlowProps) {
     onNodesChange(nodes.map(n => n.id === id ? { ...n, name } : n));
   };
 
+  const changeDuration = (id: string, durationYears: number) => {
+    onNodesChange(nodes.map(n => n.id === id ? { ...n, durationYears } : n));
+  };
+
   const changeType = (id: string, type: string) => {
     onNodesChange(nodes.map(n => n.id === id ? { ...n, type } : n));
   };
@@ -327,6 +348,7 @@ export function HierarchyFlow({ nodes, onNodesChange }: HierarchyFlowProps) {
           onAdd={addChild}
           onRemove={removeNode}
           onRename={renameNode}
+          onDurationChange={changeDuration}
           onTypeChange={changeType}
           onToggle={toggleCollapse}
         />

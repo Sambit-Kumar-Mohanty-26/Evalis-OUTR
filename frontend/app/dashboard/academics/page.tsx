@@ -18,7 +18,7 @@ interface Branch { id: string; name: string; orgNodeId?: string | null; semester
 interface School { id: string; name: string; orgNodeId?: string | null; branches: Branch[]; }
 interface Program { id: string; name: string; durationYears: number; orgNodeId?: string | null; schools: School[]; }
 interface Version { id: string; name: string; isCurrent: boolean; programs: Program[]; }
-interface OrgNode { id: string; name: string; level: number; }
+interface OrgNode { id: string; name: string; level: number; durationYears?: number; }
 
 export default function AcademicsPage() {
   const [versions, setVersions] = useState<Version[]>([]);
@@ -43,6 +43,7 @@ export default function AcademicsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [calculatedDuration, setCalculatedDuration] = useState<number | null>(null);
 
   // Stable Data Fetchers
   const fetchVersions = useCallback(async () => {
@@ -134,8 +135,20 @@ export default function AcademicsPage() {
   }, [structure, selectedProgram, selectedSchool]);
 
   // Sync Logic Helpers
-  const getSmartDuration = (name: string): number => {
-    const n = name.toUpperCase();
+  const parseYearRange = (name: string): number | null => {
+    // Stricter format: CourseName(YYYY-YYYY)
+    const match = name.match(/\((\d{4})[-–—](\d{4})\)$/);
+    if (match) {
+      const start = parseInt(match[1]);
+      const end = parseInt(match[2]);
+      if (end > start) return end - start;
+    }
+    return null;
+  };
+
+  const getSmartDuration = (node: OrgNode): number => {
+    if (node.durationYears) return node.durationYears;
+    const n = node.name.toUpperCase();
     if (n.includes("MCA") || n.includes("M.TECH") || n.includes("MBA") || n.includes("M.SC") || n.includes("M.A")) return 2;
     if (n.includes("B.TECH") || n.includes("B.E") || n.includes("B.ARCH")) return 4;
     return 4;
@@ -146,11 +159,19 @@ export default function AcademicsPage() {
       const level1Nodes = orgNodes.filter(n => n.level === 1);
       const mapping: any = {};
       level1Nodes.forEach(n => {
-        mapping[n.id] = { enabled: true, duration: getSmartDuration(n.name), name: n.name };
+        const nodeDuration = getSmartDuration(n);
+        // If we have a calculated duration from the name, filter out nodes that don't match
+        const isMatch = calculatedDuration ? nodeDuration === calculatedDuration : true;
+        
+        mapping[n.id] = { 
+          enabled: isMatch, 
+          duration: nodeDuration, 
+          name: n.name 
+        };
       });
       setSyncMapping(mapping);
     }
-  }, [activeModal, isSyncEnabled, orgNodes]);
+  }, [activeModal, isSyncEnabled, orgNodes, calculatedDuration]);
 
   const handleCreate = async (payload: any) => {
     setIsSubmitting(true);
@@ -576,7 +597,18 @@ export default function AcademicsPage() {
                         <>
                           <div className="space-y-2">
                             <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Blueprint Name</label>
-                            <input name="name" required placeholder="e.g. Syllabus 2024-2025" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
+                            <input 
+                              name="name" 
+                              required 
+                              placeholder="e.g. B.Tech(2023-2027)" 
+                              pattern="^.+\(\d{4}-\d{4}\)$"
+                              title="Format: CourseName(YYYY-YYYY)"
+                              onChange={(e) => {
+                                const dur = parseYearRange(e.target.value);
+                                setCalculatedDuration(dur);
+                              }}
+                              className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" 
+                            />
                           </div>
                           
                           <div className="flex flex-col gap-3 p-4 bg-white border border-black/5 rounded-3xl shadow-sm">
@@ -605,47 +637,47 @@ export default function AcademicsPage() {
                                       <Info size={12} className="text-brand-green" />
                                       <span className="text-[9px] font-bold uppercase tracking-tighter text-brand-green/60">Confirm Syllabus Durations</span>
                                    </div>
-                                   <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                                      {Object.entries(syncMapping).map(([id, item]) => (
-                                         <div key={id} className={cn("p-4 rounded-2xl border transition-all flex items-center justify-between gap-4", item.enabled ? "bg-white border-brand-green/20 shadow-sm" : "bg-black/5 border-transparent opacity-50")}>
-                                            <div className="flex items-center gap-3">
-                                               <input 
-                                                  type="checkbox" 
-                                                  checked={item.enabled} 
-                                                  onChange={(e) => setSyncMapping(prev => ({ ...prev, [id]: { ...prev[id], enabled: e.target.checked } }))}
-                                                  className="w-4 h-4 rounded border-black/10 text-brand-green focus:ring-brand-green"
-                                               />
-                                               <span className="text-[12px] font-bold text-[#1C1C1A]">{item.name}</span>
-                                            </div>
-                                            {item.enabled && (
-                                               <div className="flex items-center gap-2">
+                                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                       {Object.entries(syncMapping).map(([id, item]) => {
+                                          const isMismatch = calculatedDuration !== null && item.duration !== calculatedDuration;
+                                          return (
+                                            <div key={id} className={cn(
+                                                "p-4 rounded-2xl border transition-all flex items-center justify-between gap-4", 
+                                                item.enabled ? "bg-white border-brand-green/20 shadow-sm" : "bg-black/5 border-transparent opacity-50",
+                                                isMismatch && "opacity-30 grayscale pointer-events-none"
+                                            )}>
+                                               <div className="flex items-center gap-3">
                                                   <input 
-                                                     type="number" 
-                                                     value={item.duration} 
-                                                     min={1} max={10}
-                                                     onChange={(e) => setSyncMapping(prev => ({ ...prev, [id]: { ...prev[id], duration: parseInt(e.target.value) || 1 } }))}
-                                                     className="w-12 p-2 bg-[#F8F7F4] border-none rounded-lg text-[11px] font-black text-center focus:ring-1 focus:ring-brand-green/20 outline-none"
+                                                     type="checkbox" 
+                                                     checked={item.enabled && !isMismatch} 
+                                                     disabled={isMismatch}
+                                                     onChange={(e) => setSyncMapping(prev => ({ ...prev, [id]: { ...prev[id], enabled: e.target.checked } }))}
+                                                     className="w-4 h-4 rounded border-black/10 text-brand-green focus:ring-brand-green"
                                                   />
+                                                  <span className="text-[12px] font-bold text-[#1C1C1A]">{item.name}</span>
+                                               </div>
+                                               <div className="flex items-center gap-2 px-3 py-1 bg-black/5 rounded-xl border border-black/5">
+                                                  <span className="text-[11px] font-black text-brand-green">{item.duration}</span>
                                                   <span className="text-[9px] font-black text-[#1C1C1A]/30 uppercase">Yrs</span>
                                                </div>
-                                            )}
-                                         </div>
-                                      ))}
-                                   </div>
+                                            </div>
+                                          );
+                                       })}
+                                    </div>
                                 </motion.div>
                              )}
                           </AnimatePresence>
 
                           <label className="flex items-center gap-3 cursor-pointer p-4 bg-white border border-black/5 rounded-2xl">
-                             <input type="checkbox" name="isCurrent" className="w-4 h-4 text-brand-green border-black/20 focus:ring-brand-green rounded outline-none" />
-                             <span className="text-xs font-bold text-[#1C1C1A]">Set as Active Current Version</span>
+                              <input type="checkbox" name="isCurrent" className="w-4 h-4 text-brand-green border-black/20 focus:ring-brand-green rounded outline-none" />
+                             <span className="text-xs font-bold text-[#1C1C1A]">Mark as Active Batch (Multiple Allowed)</span>
                           </label>
                         </>
                      )}
 
                      {activeModal === "PROGRAM" && (
-                        <>
-                          <div className="space-y-2">
+                         <>
+                           <div className="space-y-2">
                             <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Course Name</label>
                             <input name="name" required placeholder="e.g. Bachelor of Technology" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
                           </div>

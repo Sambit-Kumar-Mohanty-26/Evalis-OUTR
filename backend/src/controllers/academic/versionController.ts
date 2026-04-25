@@ -29,13 +29,7 @@ export const createVersion = async (req: AuthRequest, res: Response): Promise<vo
         });
 
         const version = await db.$transaction(async (tx: any) => {
-            // If isCurrent: true, unset others
-            if (isCurrent) {
-                await tx.academicVersion.updateMany({
-                    where: { tenantId, isDeleted: false },
-                    data: { isCurrent: false }
-                });
-            }
+            // Multiple active batches allowed, so we don't unset others
 
             const newVersion = await tx.academicVersion.create({
                 data: {

@@ -5,7 +5,7 @@ import { AuthRequest } from '../../middleware/authMiddleware';
 
 export const createNode = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { name, type, parentId } = req.body;
+        const { name, type, parentId, durationYears } = req.body;
         const tenantId = req.user?.tenantId;
         const userId = req.user?.userId;
 
@@ -19,7 +19,8 @@ export const createNode = async (req: AuthRequest, res: Response): Promise<void>
                 name,
                 type,
                 parentId,
-                tenantId
+                tenantId,
+                durationYears: durationYears ? parseInt(durationYears as any) : 4
             }
         });
 
@@ -95,6 +96,7 @@ export const syncNodes = async (req: AuthRequest, res: Response): Promise<void> 
                         order: node.order,
                         parentId: node.parentId,
                         isCollapsed: node.collapsed || false,
+                        durationYears: node.durationYears ? parseInt(node.durationYears as any) : 4,
                         isDeleted: false
                     },
                     create: {
@@ -105,6 +107,7 @@ export const syncNodes = async (req: AuthRequest, res: Response): Promise<void> 
                         order: node.order,
                         parentId: node.parentId,
                         isCollapsed: node.collapsed || false,
+                        durationYears: node.durationYears ? parseInt(node.durationYears as any) : 4,
                         tenantId
                     }
                 });
