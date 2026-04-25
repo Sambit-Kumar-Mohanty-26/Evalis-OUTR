@@ -7,6 +7,7 @@ import {
     updateTimeline,
     toggleBatchLock,
     getPromotionLogs,
+    updateCohortTimeline,
 } from '../controllers/batch/batchController';
 import { promoteBatchSemester } from '../services/promotionService';
 import { protect, authorize } from '../middleware/authMiddleware';
@@ -26,6 +27,7 @@ router.put('/:id', updateBatch);
 
 // Timeline
 router.put('/:id/timeline', updateTimeline);
+router.post('/cohort-timeline', updateCohortTimeline);
 
 // Lock / Unlock
 router.post('/:id/lock', toggleBatchLock);

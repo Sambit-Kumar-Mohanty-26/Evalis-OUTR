@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, CalendarDays, ChevronRight, GraduationCap, Loader2, Lock, Play, Trash2, Unlock } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -93,14 +94,16 @@ export default function BranchDetailPage() {
                 api.get<{ users: StudentRecord[] }>("/api/v1/user?role=STUDENT&limit=500"),
             ]);
             if (structureRes.status === "fulfilled") setPrograms(structureRes.value.programs || []);
-            if (batchRes.status === "fulfilled")     setBatches(batchRes.value.batches || []);
+            if (batchRes.status === "fulfilled") {
+                setBatches(batchRes.value.batches || []);
+            }
             else toast.error(getErrorMessage(batchRes.reason, "Failed to load batches"));
             if (userRes.status === "fulfilled")      setStudents(userRes.value.users || []);
             else toast.error(getErrorMessage(userRes.reason, "Failed to load students"));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [branchId, cohortKey]);
 
     useEffect(() => {
         fetchData();

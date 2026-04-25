@@ -287,3 +287,59 @@ export const getPromotionLogs = async (req: AuthRequest, res: Response): Promise
         res.status(500).json({ error: 'Failed to retrieve promotion logs.' });
     }
 };
+
+// ─── UPDATE COHORT TIMELINE ──────────────────────────────────────────────────
+export const updateCohortTimeline = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const tenantId = req.user!.tenantId;
+        const { cohortName, timelines } = req.body; 
+
+        if (!cohortName || !timelines) {
+            res.status(400).json({ error: 'cohortName and timelines are required.' });
+            return;
+        }
+
+        // Find all batches for this cohort and tenant
+        const batches = await db.batch.findMany({
+            where: {
+                name: { contains: cohortName },
+                academicYear: { tenantId }
+            },
+            select: { id: true, isLocked: true }
+        });
+
+        if (batches.length === 0) {
+            res.status(404).json({ error: `No branches have been created for the ${cohortName} cohort yet. Please create at least one branch batch first.` });
+            return;
+        }
+
+        // Update all batches in this cohort (even if individual branches are 'locked')
+        for (const batch of batches) {
+            for (const t of timelines) {
+                await db.batchSemester.upsert({
+                    where: {
+                        batchId_semesterNumber: {
+                            batchId: batch.id,
+                            semesterNumber: t.semesterNumber
+                        }
+                    },
+                    update: {
+                        startDate: new Date(t.startDate),
+                        endDate: new Date(t.endDate),
+                    },
+                    create: {
+                        batchId: batch.id,
+                        semesterNumber: t.semesterNumber,
+                        startDate: new Date(t.startDate),
+                        endDate: new Date(t.endDate),
+                    }
+                });
+            }
+        }
+
+        res.json({ message: `Timeline updated for all ${batches.length} branches in the cohort.` });
+    } catch (error) {
+        console.error('Update Cohort Timeline Error:', error);
+        res.status(500).json({ error: 'Failed to update cohort timeline.' });
+    }
+};

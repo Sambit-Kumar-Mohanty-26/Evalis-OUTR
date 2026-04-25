@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Building2, CalendarDays, ChevronDown, ChevronRight, GraduationCap, Loader2, Users } from "lucide-react";
+import { ArrowLeft, Building2, CalendarDays, ChevronDown, ChevronRight, GraduationCap, Loader2, Users, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -13,9 +13,11 @@ const getErrorMessage = (error: unknown, fallback: string) => (
 );
 
 const parseCohort = (cohort: string) => {
-    const match = cohort.match(/^(20\d{2})-(20\d{2})$/);
+    const match = cohort.match(/(\d{4})[-–—](\d{4})/);
     if (!match) return null;
-    return { startYear: Number(match[1]), endYear: Number(match[2]), durationYears: Number(match[2]) - Number(match[1]) };
+    const startYear = Number(match[1]);
+    const endYear = Number(match[2]);
+    return { startYear, endYear, durationYears: Math.max(1, endYear - startYear) };
 };
 
 const yearRangeFromName = (name: string) => {
@@ -45,6 +47,11 @@ interface Batch {
         school: { id?: string; name: string; program: { id?: string; name: string } };
     };
     _count: { students: number };
+    semesterTimelines?: {
+        semesterNumber: number;
+        startDate: string;
+        endDate: string;
+    }[];
 }
 
 interface BranchRow { id: string; name: string; batch?: Batch; studentsCount: number; }
@@ -53,7 +60,7 @@ interface SchoolRow { id: string; name: string; programName: string; branches: B
 export default function BatchDetailPage() {
     const params = useParams<{ cohort: string }>();
     const cohortKey = decodeURIComponent(params.cohort);
-    const cohort = parseCohort(cohortKey);
+    const cohort = useMemo(() => parseCohort(cohortKey), [cohortKey]);
 
     const [programs, setPrograms] = useState<BlueprintProgram[]>([]);
     const [batches, setBatches] = useState<Batch[]>([]);
@@ -61,11 +68,13 @@ export default function BatchDetailPage() {
     const [loading, setLoading] = useState(true);
     const [selectedSchoolId, setSelectedSchoolId] = useState("");
     const [expandedSchoolId, setExpandedSchoolId] = useState("");
+    const [showTimelineModal, setShowTimelineModal] = useState(false);
+    const [editingTimelines, setEditingTimelines] = useState<any[]>([]);
+    const [saving, setSaving] = useState(false);
 
     const fetchData = useCallback(async () => {
         try {
             setLoading(true);
-            // allSettled: a structure 404 must not kill the batch/student data
             const [structureRes, batchRes, userRes] = await Promise.allSettled([
                 api.get<{ programs?: BlueprintProgram[] }>("/api/v1/academic/structure?versionId=current"),
                 api.get<{ batches: Batch[] }>("/api/v1/batch"),
@@ -73,13 +82,37 @@ export default function BatchDetailPage() {
             ]);
 
             if (structureRes.status === "fulfilled") setPrograms(structureRes.value.programs || []);
-            if (batchRes.status === "fulfilled")     setBatches(batchRes.value.batches || []);
+            if (batchRes.status === "fulfilled") {
+                const allBatches = batchRes.value.batches || [];
+                setBatches(allBatches);
+
+                // Pre-populate timeline if any batch has one
+                const cohortBatches = allBatches.filter((b: any) => {
+                    const parsed = yearRangeFromName(b.name);
+                    return `${parsed?.startYear || b.startYear}-${parsed?.endYear || b.endYear}` === cohortKey;
+                });
+                const duration = cohort?.durationYears || (programs[0]?.durationYears) || 4;
+                const totalSems = duration * 2;
+                const defaultT = [];
+                for (let i = 1; i <= totalSems; i++) {
+                    const existing = cohortBatches.length > 0 
+                        ? cohortBatches[0].semesterTimelines?.find((t: any) => t.semesterNumber === i)
+                        : null;
+                    
+                    defaultT.push({
+                        semesterNumber: i,
+                        startDate: existing ? existing.startDate.split('T')[0] : "",
+                        endDate: existing ? existing.endDate.split('T')[0] : ""
+                    });
+                }
+                setEditingTimelines(defaultT);
+            }
             else toast.error(getErrorMessage(batchRes.reason, "Failed to load batches"));
             if (userRes.status === "fulfilled")      setStudents(userRes.value.users || []);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [cohortKey, cohort]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -173,6 +206,31 @@ export default function BatchDetailPage() {
         setExpandedSchoolId((prev) => (prev === id ? "" : id));
     };
 
+    const handleUpdateCohortTimeline = async () => {
+        const validTimelines = editingTimelines.filter(t => t.startDate && t.endDate);
+        
+        if (validTimelines.length === 0) {
+            toast.error("Please fill in at least one semester timeline (start and end dates)");
+            return;
+        }
+
+        try {
+            setSaving(true);
+            await api.post("/api/v1/batch/cohort-timeline", {
+                cohortName: cohortKey,
+                timelines: validTimelines
+            });
+            toast.success("Cohort timeline updated for all branches");
+            setShowTimelineModal(false);
+            fetchData();
+        } catch (error: any) {
+            const msg = error.response?.data?.error || "Failed to update cohort timeline";
+            toast.error(msg);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center py-24">
@@ -199,17 +257,26 @@ export default function BatchDetailPage() {
 
     return (
         <div className="space-y-8">
-            <div>
-                <BackLink />
-                <div className="flex items-center gap-2 text-brand-green text-xs font-bold tracking-[0.2em] uppercase mt-5 mb-2">
-                    <CalendarDays size={14} /> Batch Detail
+            <div className="flex items-end justify-between gap-4">
+                <div>
+                    <BackLink />
+                    <div className="flex items-center gap-2 text-brand-green text-xs font-bold tracking-[0.2em] uppercase mt-5 mb-2">
+                        <CalendarDays size={14} /> Batch Detail
+                    </div>
+                    <h1 className="text-4xl font-serif font-bold text-[#1C1C1A]">{cohortKey}</h1>
+                    <p className="text-sm text-[#1C1C1A]/50 mt-1">
+                        {schools.length > 0
+                            ? `${[...new Set(schools.map((s) => s.programName))].join(", ")} — schools, branches, and students.`
+                            : "Loading academic structure…"}
+                    </p>
                 </div>
-                <h1 className="text-4xl font-serif font-bold text-[#1C1C1A]">{cohortKey}</h1>
-                <p className="text-sm text-[#1C1C1A]/50 mt-1">
-                    {schools.length > 0
-                        ? `${[...new Set(schools.map((s) => s.programName))].join(", ")} — schools, branches, and students.`
-                        : "Loading academic structure…"}
-                </p>
+                <button
+                    onClick={() => setShowTimelineModal(true)}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-green text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-lg"
+                >
+                    <CalendarDays size={14} />
+                    Set Cohort Timeline
+                </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -366,6 +433,87 @@ export default function BatchDetailPage() {
                     )}
                 </section>
             </div>
+
+            <AnimatePresence>
+                {showTimelineModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4"
+                        onClick={() => setShowTimelineModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 border border-[#1C1C1A]/5 max-h-[90vh] overflow-y-auto"
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 className="text-xl font-bold text-[#1C1C1A]">Global Cohort Timeline</h2>
+                                    <p className="text-xs text-[#1C1C1A]/40 mt-1">Set academic dates for all branches in the {cohortKey} cohort</p>
+                                </div>
+                                <button onClick={() => setShowTimelineModal(false)} className="p-2 hover:bg-black/5 rounded-xl transition-colors text-[#1C1C1A]/40">
+                                    <Trash2 size={18} className="rotate-45" />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                {editingTimelines.map((t, idx) => (
+                                    <div key={t.semesterNumber} className="p-4 bg-[#F4F2EB] rounded-2xl grid grid-cols-12 gap-4 items-center">
+                                        <div className="col-span-2">
+                                            <div className="text-[10px] font-bold text-[#1C1C1A]/30 uppercase tracking-widest">Sem</div>
+                                            <div className="text-lg font-bold text-[#1C1C1A]">{t.semesterNumber}</div>
+                                        </div>
+                                        <div className="col-span-5">
+                                            <label className="text-[9px] font-bold text-[#1C1C1A]/40 uppercase tracking-widest block mb-1">Start Date</label>
+                                            <input 
+                                                type="date" 
+                                                value={t.startDate}
+                                                onChange={(e) => {
+                                                    const newTimelines = [...editingTimelines];
+                                                    newTimelines[idx].startDate = e.target.value;
+                                                    setEditingTimelines(newTimelines);
+                                                }}
+                                                className="w-full bg-white border border-black/5 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-brand-green/20 outline-none"
+                                            />
+                                        </div>
+                                        <div className="col-span-5">
+                                            <label className="text-[9px] font-bold text-[#1C1C1A]/40 uppercase tracking-widest block mb-1">End Date</label>
+                                            <input 
+                                                type="date" 
+                                                value={t.endDate}
+                                                onChange={(e) => {
+                                                    const newTimelines = [...editingTimelines];
+                                                    newTimelines[idx].endDate = e.target.value;
+                                                    setEditingTimelines(newTimelines);
+                                                }}
+                                                className="w-full bg-white border border-black/5 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-brand-green/20 outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex justify-end gap-3 mt-8">
+                                <button onClick={() => setShowTimelineModal(false)} className="px-5 py-2.5 text-sm font-bold text-[#1C1C1A]/50 hover:text-[#1C1C1A] transition-colors">
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={handleUpdateCohortTimeline} 
+                                    disabled={saving}
+                                    className="px-6 py-2.5 bg-[#1C1C1A] text-white text-sm font-bold rounded-xl hover:bg-[#2C2C2A] transition-colors shadow-lg disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {saving && <Loader2 size={16} className="animate-spin" />}
+                                    {saving ? "Applying to All Branches..." : "Apply to All Branches"}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

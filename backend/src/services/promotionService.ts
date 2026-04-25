@@ -157,24 +157,11 @@ export async function promoteBatchSemester(batchId: string, adminUserId: string)
     if (!batch) throw new Error('Batch not found.');
 
     const currentSem = batch.currentSemester;
-    const isYearEnd = currentSem % 2 === 0;   // Even semesters mark end of academic year
+    const isOddToEven = currentSem % 2 === 1; // 1->2, 3->4
+    const isEvenToOdd = currentSem % 2 === 0; // 2->3, 4->5
     const isFinalSemester = currentSem >= batch.totalSemesters;
 
-    // 2. Year-end and final-semester promotions require all results to be published first
-    if (isYearEnd || isFinalSemester) {
-        const unpublished = await db.studentResult.count({
-            where: {
-                examInstance: { batchId, semester: currentSem },
-                isPublished: false
-            }
-        });
-        if (unpublished > 0) {
-            errors.push(`Cannot promote: ${unpublished} result(s) still unpublished for Semester ${currentSem}.`);
-            return { promoted, promotedWithBacklog, notPromoted, movedToNextCohort, graduated, errors, details };
-        }
-    }
-
-    // 3. Fetch current BatchSemester record for logging
+    // ─── 1. TIMELINE & RESULT VALIDATION ────────────────────────────────────
     const batchSemester = await db.batchSemester.findUnique({
         where: { batchId_semesterNumber: { batchId, semesterNumber: currentSem } }
     });
@@ -183,67 +170,80 @@ export async function promoteBatchSemester(batchId: string, adminUserId: string)
         return { promoted, promotedWithBacklog, notPromoted, movedToNextCohort, graduated, errors, details };
     }
 
-    // 4. Lazily resolve next-year batch only once if any student needs it
+    const today = new Date();
+    if (today < new Date(batchSemester.endDate)) {
+        errors.push(`Cannot promote yet: Current semester (${currentSem}) has not reached its end date (${batchSemester.endDate.toLocaleDateString()}).`);
+        return { promoted, promotedWithBacklog, notPromoted, movedToNextCohort, graduated, errors, details };
+    }
+
+    // Both cases require all results for the current semester to be published
+    const unpublished = await db.studentResult.count({
+        where: {
+            examInstance: { batchId, semester: currentSem },
+            isPublished: false
+        }
+    });
+    if (unpublished > 0) {
+        errors.push(`Cannot promote: ${unpublished} result(s) still unpublished for Semester ${currentSem}.`);
+        return { promoted, promotedWithBacklog, notPromoted, movedToNextCohort, graduated, errors, details };
+    }
+
+    // ─── 2. LAZY RESOLVE NEXT YEAR BATCH ──────────────────────────────────────
     let nextYearBatch: { id: string } | null = null;
     const getNextYearBatch = async () => {
-        if (!nextYearBatch) {
-            nextYearBatch = await findOrCreateNextYearBatch(batch as any);
-        }
+        if (!nextYearBatch) nextYearBatch = await findOrCreateNextYearBatch(batch as any);
         return nextYearBatch;
     };
 
-    // 5. Process each student
+    // ─── 3. PROCESS EACH STUDENT ──────────────────────────────────────────────
     for (const student of batch.students) {
         const activeBacklogs = await db.studentBacklog.count({
             where: { studentId: student.id, status: 'ACTIVE' }
         });
         const cgpa = student.cgpa ?? 0;
-
-        // Threshold is derived from which year boundary we are crossing:
-        // Sem 2 end → Year 1 (4.5), Sem 4 end → Year 2 (5.0),
-        // Sem 6 end → Year 3 (5.5), Sem 8 end / final → Year 4+ (6.0)
-        const fromYear = currentSem / 2; // always an integer at even-sem boundaries
-        const threshold = getPromotionThreshold(fromYear);
-
+        
         let outcome: 'P' | 'XP' | 'X';
         let remarks = '';
         let movedBatchId: string | null = null;
 
         if (isFinalSemester) {
-            // ── Graduation check ─────────────────────────────────────────────
+            // Final Sem (Even -> Pass/Grad)
+            const threshold = getPromotionThreshold(currentSem / 2);
             if (cgpa >= threshold && activeBacklogs === 0) {
                 outcome = 'P';
                 remarks = `Graduated with CGPA ${cgpa.toFixed(2)}`;
                 graduated++;
                 await db.user.update({ where: { id: student.id }, data: { status: 'GRADUATED' } });
-            } else if (activeBacklogs > 0) {
-                outcome = 'X';
-                remarks = `${activeBacklogs} active backlog(s) — cannot graduate`;
-                notPromoted++;
             } else {
                 outcome = 'X';
-                remarks = `CGPA ${cgpa.toFixed(2)} below ${threshold} — cannot graduate`;
+                remarks = activeBacklogs > 0 ? `${activeBacklogs} active backlog(s)` : `CGPA ${cgpa.toFixed(2)} < ${threshold}`;
                 notPromoted++;
             }
 
-        } else if (isYearEnd) {
-            // ── Year-end transition: apply per-year CGPA threshold ────────────
-            if (cgpa >= threshold) {
+        } else if (isEvenToOdd) {
+            // 🟩 CASE 2: EVEN → ODD (CRITICAL CHECKPOINT)
+            const fromYear = currentSem / 2;
+            const threshold = getPromotionThreshold(fromYear);
+            
+            // Critical Check: CGPA and Backlogs
+            // Most universities allow a small number of backlogs (e.g. 4-5) or none for year promotion.
+            // Based on user: "Logic: Results, Total backlogs, CGPA"
+            if (cgpa >= threshold && activeBacklogs <= 4) { // Assuming a generous limit of 4 backlogs for checkpoint
                 if (activeBacklogs === 0) {
                     outcome = 'P';
-                    remarks = `Promoted to Semester ${currentSem + 1}. CGPA ${cgpa.toFixed(2)} ≥ ${threshold}`;
+                    remarks = `Critical Checkpoint Passed (CGPA ${cgpa.toFixed(2)}). Promoted to Sem ${currentSem + 1}`;
                     promoted++;
                 } else {
                     outcome = 'XP';
-                    remarks = `Promoted with ${activeBacklogs} backlog(s) to Semester ${currentSem + 1}. CGPA ${cgpa.toFixed(2)}`;
+                    remarks = `Critical Checkpoint Passed with ${activeBacklogs} backlog(s). Promoted to Sem ${currentSem + 1}`;
                     promotedWithBacklog++;
                 }
                 await db.user.update({ where: { id: student.id }, data: { currentSemester: currentSem + 1 } });
             } else {
-                // Year back: move to next cohort's batch (startYear + 1), reset to Semester 1
+                // Year Back
                 outcome = 'X';
                 const nextBatch = await getNextYearBatch();
-                remarks = `Year back — CGPA ${cgpa.toFixed(2)} < ${threshold}. Moved to ${batch.startYear + 1} cohort.`;
+                remarks = cgpa < threshold ? `Year back: CGPA ${cgpa.toFixed(2)} < ${threshold}` : `Year back: ${activeBacklogs} backlogs exceeded limit`;
                 notPromoted++;
                 movedToNextCohort++;
                 movedBatchId = nextBatch.id;
@@ -254,20 +254,21 @@ export async function promoteBatchSemester(batchId: string, adminUserId: string)
             }
 
         } else {
-            // ── Mid-year (odd → even sem): simple promotion, no CGPA check ───
+            // 🟩 CASE 1: ODD → EVEN (Simple Transition)
+            // Logic: promote ALL students, backlogs recorded but don't block
             if (activeBacklogs === 0) {
                 outcome = 'P';
-                remarks = `Promoted to Semester ${currentSem + 1}`;
+                remarks = `Simple Transition: Promoted to Sem ${currentSem + 1}`;
                 promoted++;
             } else {
                 outcome = 'XP';
-                remarks = `Promoted with ${activeBacklogs} backlog(s) to Semester ${currentSem + 1}`;
+                remarks = `Simple Transition: Promoted with ${activeBacklogs} backlog(s) to Sem ${currentSem + 1}`;
                 promotedWithBacklog++;
             }
             await db.user.update({ where: { id: student.id }, data: { currentSemester: currentSem + 1 } });
         }
 
-        // Create promotion log
+        // Create log and detail entry...
         await db.promotionLog.create({
             data: {
                 studentId: student.id,
@@ -293,7 +294,7 @@ export async function promoteBatchSemester(batchId: string, adminUserId: string)
         });
     }
 
-    // 6. Mark current semester complete and advance the batch
+    // 4. Update Batch State
     await db.batchSemester.update({
         where: { id: batchSemester.id },
         data: { status: 'COMPLETED' }
@@ -301,17 +302,12 @@ export async function promoteBatchSemester(batchId: string, adminUserId: string)
 
     if (isFinalSemester && graduated > 0) {
         await db.batch.update({ where: { id: batchId }, data: { status: 'PASSED' } });
-
     } else if (!isFinalSemester) {
-        // Advance the batch to the next semester regardless of outcomes
         await db.batch.update({ where: { id: batchId }, data: { currentSemester: currentSem + 1 } });
-
         const nextSem = await db.batchSemester.findUnique({
             where: { batchId_semesterNumber: { batchId, semesterNumber: currentSem + 1 } }
         });
-        if (nextSem) {
-            await db.batchSemester.update({ where: { id: nextSem.id }, data: { status: 'ONGOING' } });
-        }
+        if (nextSem) await db.batchSemester.update({ where: { id: nextSem.id }, data: { status: 'ONGOING' } });
     }
 
     return { promoted, promotedWithBacklog, notPromoted, movedToNextCohort, graduated, errors, details };

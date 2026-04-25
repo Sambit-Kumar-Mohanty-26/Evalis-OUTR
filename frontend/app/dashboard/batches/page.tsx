@@ -59,6 +59,11 @@ interface Batch {
         school: { name: string; program: { name: string } };
     };
     _count: { students: number };
+    semesterTimelines?: {
+        semesterNumber: number;
+        startDate: string;
+        endDate: string;
+    }[];
 }
 
 interface CohortGroup {
