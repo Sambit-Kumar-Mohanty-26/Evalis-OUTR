@@ -4,23 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { 
-    LayoutDashboard, 
-    Network, 
-    GraduationCap, 
-    Users, 
-    CalendarDays, 
-    ClipboardList, 
-    BarChart3, 
-    Settings, 
-    LogOut,
-    ShieldAlert,
-    QrCode
+    LayoutDashboard, Network, GraduationCap, Users, CalendarDays, ClipboardList,
+    BarChart3, Settings, LogOut, ShieldAlert, QrCode,
+    Building2, BookOpen, AlertCircle, PenLine, History, TrendingDown, Flame
 } from "lucide-react";
 import { EvalisLogo } from "@/components/ui/EvalisLogo";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 
-const menuItems = [
+const adminMenuItems = [
     { name: "Overview", icon: LayoutDashboard, href: "/dashboard" },
     { name: "Organization", icon: Network, href: "/dashboard/organization" },
     { name: "Academics", icon: GraduationCap, href: "/dashboard/academics" },
@@ -31,6 +23,48 @@ const menuItems = [
     { name: "Audit Logs", icon: ShieldAlert, href: "/dashboard/audit" },
     { name: "QR Onboarding", icon: QrCode, href: "/dashboard/qrs" },
 ];
+
+const hosMenuItems = [
+    { name: "School Overview", icon: LayoutDashboard, href: "/dashboard/hos" },
+    { name: "Branch Performance", icon: Building2, href: "/dashboard/hos/branches" },
+    { name: "Subject Analysis", icon: BookOpen, href: "/dashboard/hos/subjects" },
+    { name: "Backlog Heatmap", icon: Flame, href: "/dashboard/hos/heatmap" },
+    { name: "Marks Entry", icon: PenLine, href: "/dashboard/hos/marks" },
+];
+
+const advisorMenuItems = [
+    { name: "Branch Overview", icon: LayoutDashboard, href: "/dashboard/advisor" },
+    { name: "Students", icon: Users, href: "/dashboard/advisor/students" },
+    { name: "At-Risk Students", icon: TrendingDown, href: "/dashboard/advisor/at-risk" },
+    { name: "Subject Performance", icon: BarChart3, href: "/dashboard/advisor/subjects" },
+    { name: "Marks Entry", icon: PenLine, href: "/dashboard/advisor/marks" },
+];
+
+const teacherMenuItems = [
+    { name: "My Subjects", icon: BookOpen, href: "/dashboard/teacher" },
+    { name: "Marks Entry", icon: PenLine, href: "/dashboard/teacher/marks" },
+    { name: "Performance", icon: BarChart3, href: "/dashboard/teacher/performance" },
+];
+
+const studentMenuItems = [
+    { name: "My Overview", icon: LayoutDashboard, href: "/dashboard/student" },
+    { name: "My Marks", icon: ClipboardList, href: "/dashboard/student/marks" },
+    { name: "Backlogs", icon: AlertCircle, href: "/dashboard/student/backlogs" },
+    { name: "History", icon: History, href: "/dashboard/student/history" },
+];
+
+function getMenuItems(role?: string) {
+    switch (role) {
+        case 'HEAD_OF_SCHOOL': return hosMenuItems;
+        case 'ADVISOR': return advisorMenuItems;
+        case 'TEACHER': return teacherMenuItems;
+        case 'STUDENT': return studentMenuItems;
+        default: return adminMenuItems;
+    }
+}
+
+// Keep for backwards compat - not used anymore
+const menuItems = adminMenuItems;
 
 export function Sidebar() {
     const pathname = usePathname();
@@ -45,8 +79,9 @@ export function Sidebar() {
 
             {/* Navigation Section */}
             <nav className="flex-1 px-4 space-y-0.5 overflow-hidden">
-                {menuItems.map((item) => {
-                    const isActive = pathname === item.href;
+                {getMenuItems(user?.role).map((item) => {
+                    const basePaths = ['/dashboard', '/dashboard/hos', '/dashboard/advisor', '/dashboard/teacher', '/dashboard/student'];
+                    const isActive = pathname === item.href || (!basePaths.includes(item.href) && pathname.startsWith(item.href));
                     return (
                         <Link key={item.name} href={item.href}>
                             <motion.div

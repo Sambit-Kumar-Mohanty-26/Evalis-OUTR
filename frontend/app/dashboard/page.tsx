@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { 
@@ -12,13 +14,33 @@ import {
     Plus,
     UserPlus,
     FilePlus,
-    Upload
+    Upload,
+    Loader2
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/Button";
 
+const ROLE_REDIRECT: Record<string, string> = {
+    HEAD_OF_SCHOOL: '/dashboard/hos',
+    ADVISOR: '/dashboard/advisor',
+    TEACHER: '/dashboard/teacher',
+    STUDENT: '/dashboard/student',
+};
+
 export default function DashboardOverview() {
     const { user } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (user?.role && ROLE_REDIRECT[user.role]) {
+            router.replace(ROLE_REDIRECT[user.role]);
+        }
+    }, [user?.role, router]);
+
+    // Show spinner while redirecting non-admin roles
+    if (user?.role && ROLE_REDIRECT[user.role]) {
+        return <div className="flex items-center justify-center h-full py-32"><Loader2 className="animate-spin text-brand-green" size={32} /></div>;
+    }
 
     const splitText = (text: string) => {
         return text.split(" ").map((word, i) => (

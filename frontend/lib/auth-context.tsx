@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("evalis_user", JSON.stringify(userData));
 
         // Role-based redirect
-        if (userData.onboardingRequired) {
+        if (userData.onboardingRequired && userData.role !== "ADMIN") {
             router.push("/onboard/setup");
             return;
         }

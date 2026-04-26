@@ -20,7 +20,7 @@ export default function DashboardLayout({
         if (!isLoading) {
             if (!user) {
                 router.push("/login");
-            } else if (user.onboardingRequired) {
+            } else if (user.onboardingRequired && user.role !== "ADMIN") {
                 router.push("/onboard/setup");
             }
         }

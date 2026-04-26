@@ -47,10 +47,10 @@ router.post('/instances', authorize('ADMIN'), createExamInstance);
 router.put('/instances/:id/status', authorize('ADMIN'), updateExamStatus);
 router.post('/instances/:id/publish', authorize('ADMIN'), publishResults);
 
-// ─── MARKS ENTRY (Teacher + Admin) ───────────────────────────────────────────
-router.post('/marks', enterMarks);
+// ─── MARKS ENTRY (Teacher + Advisor + HOS + Admin) ──────────────────────────
+router.post('/marks', authorize('TEACHER', 'ADVISOR', 'HEAD_OF_SCHOOL', 'ADMIN'), enterMarks);
 router.get('/marks/:subjectId', getMarks);
-router.post('/marks/upload', upload.single('file'), uploadMarksCSV);
+router.post('/marks/upload', upload.single('file'), authorize('TEACHER', 'ADVISOR', 'HEAD_OF_SCHOOL', 'ADMIN'), uploadMarksCSV);
 
 // ─── RESULTS ─────────────────────────────────────────────────────────────────
 router.post('/results/calculate', protect, authorize('ADMIN'), calculateResults);

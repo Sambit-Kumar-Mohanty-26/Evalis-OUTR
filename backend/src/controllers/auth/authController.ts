@@ -168,7 +168,7 @@ export const onboard = async (req: Request, res: Response): Promise<void> => {
           passwordHash,
           role: 'ADMIN',
           tenantId: tenant.id,
-          onboardingRequired: true
+          onboardingRequired: false // Primary admin sets password during this flow
         }
       });
 

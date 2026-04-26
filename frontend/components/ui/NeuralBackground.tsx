@@ -4,23 +4,20 @@ import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 
 export function NeuralBackground() {
+    const [nodes, setNodes] = React.useState<any[]>([]);
     const [mounted, setMounted] = React.useState(false);
 
     React.useEffect(() => {
         setMounted(true);
-    }, []);
-
-    const nodes = React.useMemo(() => {
-        if (!mounted) return [];
-        return Array.from({ length: 30 }).map((_, i) => ({
+        setNodes(Array.from({ length: 30 }).map((_, i) => ({
             id: i,
             x: Math.random() * 1000,
             y: Math.random() * 1000,
             size: Math.random() * 15 + 5,
             duration: Math.random() * 20 + 20,
             opacity: Math.random() * 0.3 + 0.1,
-        }));
-    }, [mounted]);
+        })));
+    }, []);
 
     if (!mounted) return null;
 
@@ -34,7 +31,7 @@ export function NeuralBackground() {
                     </radialGradient>
                 </defs>
 
-                {nodes.map((node) => (
+                {nodes.filter(node => node && typeof node.x === 'number' && typeof node.y === 'number').map((node) => (
                     <motion.circle
                         key={node.id}
                         cx={node.x}
@@ -54,13 +51,12 @@ export function NeuralBackground() {
                     />
                 ))}
 
-                {/* Cinematic light rays */}
-                <motion.div
-                    className="absolute inset-0 bg-gradient-to-br from-brand-green/5 to-transparent mix-blend-soft-light"
-                    animate={{ opacity: [0.3, 0.6, 0.3] }}
-                    transition={{ duration: 8, repeat: Infinity }}
-                />
             </svg>
+            <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-brand-green/5 to-transparent mix-blend-soft-light pointer-events-none"
+                animate={{ opacity: [0.3, 0.6, 0.3] }}
+                transition={{ duration: 8, repeat: Infinity }}
+            />
         </div>
     );
 }

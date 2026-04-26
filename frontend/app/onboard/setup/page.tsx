@@ -37,6 +37,7 @@ export default function OnboardSetupPage() {
 
     useEffect(() => {
         if (!user) router.push("/login");
+        if (user?.role === "ADMIN") router.push("/dashboard");
         
         const fetchMetadata = async () => {
             try {

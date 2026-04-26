@@ -117,6 +117,7 @@ export default function LoginPage() {
                                     <Mail size={18} strokeWidth={1.5} />
                                 </div>
                                 <input
+                                    suppressHydrationWarning
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
@@ -139,6 +140,7 @@ export default function LoginPage() {
                                     <Lock size={18} strokeWidth={1.5} />
                                 </div>
                                 <input
+                                    suppressHydrationWarning
                                     type={showPassword ? "text" : "password"}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
