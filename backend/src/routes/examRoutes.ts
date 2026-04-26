@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import {
     getExamSchemas,
     createExamSchema,
@@ -17,6 +18,8 @@ import {
     getMarks,
     calculateResults,
     getStudentResults,
+    getExamInstanceResults,
+    uploadMarksCSV,
 } from '../controllers/exam/marksController';
 import {
     getBacklogs,
@@ -27,6 +30,7 @@ import {
 import { protect, authorize } from '../middleware/authMiddleware';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 router.use(protect);
 
@@ -46,10 +50,12 @@ router.post('/instances/:id/publish', authorize('ADMIN'), publishResults);
 // ─── MARKS ENTRY (Teacher + Admin) ───────────────────────────────────────────
 router.post('/marks', enterMarks);
 router.get('/marks/:subjectId', getMarks);
+router.post('/marks/upload', upload.single('file'), uploadMarksCSV);
 
 // ─── RESULTS ─────────────────────────────────────────────────────────────────
-router.post('/results/calculate', authorize('ADMIN'), calculateResults);
-router.get('/results/:studentId', getStudentResults);
+router.post('/results/calculate', protect, authorize('ADMIN'), calculateResults);
+router.get('/instances/:id/results', protect, getExamInstanceResults);
+router.get('/student/:studentId', protect, getStudentResults);
 
 // ─── BACKLOGS ────────────────────────────────────────────────────────────────
 router.get('/backlogs', getBacklogs);

@@ -12,7 +12,10 @@ export const getExamSchemas = async (req: AuthRequest, res: Response): Promise<v
         const schemas = await db.examSchema.findMany({
             where: { tenantId, isDeleted: false },
             include: {
-                components: { orderBy: { order: 'asc' } },
+                components: { 
+                    orderBy: { order: 'asc' },
+                    include: { questions: { orderBy: { order: 'asc' } } }
+                },
                 _count: { select: { subjects: true } }
             },
             orderBy: { createdAt: 'desc' }
@@ -61,10 +64,23 @@ export const createExamSchema = async (req: AuthRequest, res: Response): Promise
                         maxMarks: c.maxMarks,
                         category: c.category || 'INTERNAL',
                         order: c.order ?? i,
+                        questions: {
+                            create: (c.questions || []).map((q: any, qi: number) => ({
+                                label: q.label,
+                                maxMarks: q.maxMarks,
+                                co: q.co,
+                                order: q.order ?? qi
+                            }))
+                        }
                     }))
                 }
             },
-            include: { components: { orderBy: { order: 'asc' } } }
+            include: { 
+                components: { 
+                    orderBy: { order: 'asc' },
+                    include: { questions: { orderBy: { order: 'asc' } } }
+                } 
+            }
         });
 
         // Audit
@@ -104,15 +120,26 @@ export const updateExamSchema = async (req: AuthRequest, res: Response): Promise
 
             // Delete old components and create new ones
             await db.examComponent.deleteMany({ where: { schemaId: id } });
-            await db.examComponent.createMany({
-                data: components.map((c: any, i: number) => ({
-                    name: c.name,
-                    maxMarks: c.maxMarks,
-                    category: c.category || 'INTERNAL',
-                    order: c.order ?? i,
-                    schemaId: id,
-                }))
-            });
+            
+            for (const c of components) {
+                await db.examComponent.create({
+                    data: {
+                        name: c.name,
+                        maxMarks: c.maxMarks,
+                        category: c.category || 'INTERNAL',
+                        order: c.order ?? 0,
+                        schemaId: id,
+                        questions: {
+                            create: (c.questions || []).map((q: any, qi: number) => ({
+                                label: q.label,
+                                maxMarks: q.maxMarks,
+                                co: q.co,
+                                order: q.order ?? qi
+                            }))
+                        }
+                    }
+                });
+            }
         }
 
         const schema = await db.examSchema.update({

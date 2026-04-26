@@ -156,7 +156,7 @@ export const createBranch = async (req: AuthRequest, res: Response): Promise<voi
 
 export const createSubject = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { name, code, creditHours, maxMarks, type, semesterId } = req.body;
+        const { name, code, creditHours, maxMarks, type, semesterId, examSchemaId } = req.body;
         const userId = req.user?.userId;
 
         const subject = await db.subject.create({
@@ -166,7 +166,8 @@ export const createSubject = async (req: AuthRequest, res: Response): Promise<vo
                 creditHours: parseInt(creditHours), 
                 maxMarks: parseInt(maxMarks), 
                 type, 
-                semesterId 
+                semesterId,
+                examSchemaId: examSchemaId || null
             }
         });
 
@@ -199,5 +200,33 @@ export const createSemester = async (req: AuthRequest, res: Response): Promise<v
         res.status(201).json(semester);
     } catch (error) {
         res.status(500).json({ error: 'Failed to add manual semester.' });
+    }
+};
+
+export const getSubjects = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const { semesterId, branchId } = req.query;
+        const where: any = { isDeleted: false };
+        if (semesterId) where.semesterId = semesterId;
+        
+        // If branchId is provided, find all semesters in that branch
+        if (branchId) {
+            where.semester = { branchId };
+        }
+
+        const subjects = await db.subject.findMany({
+            where,
+            include: {
+                semester: {
+                    include: { branch: true }
+                },
+                examSchema: { select: { id: true, name: true, type: true, totalMarks: true } }
+            },
+            orderBy: { name: 'asc' }
+        });
+        res.json({ subjects });
+    } catch (error) {
+        console.error('Get Subjects Error:', error);
+        res.status(500).json({ error: 'Failed to retrieve subjects.' });
     }
 };

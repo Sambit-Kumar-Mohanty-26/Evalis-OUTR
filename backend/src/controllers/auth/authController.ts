@@ -217,6 +217,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
+      path: '/',
       maxAge: REFRESH_TOKEN_EXPIRES_IN
     });
 
@@ -246,11 +247,26 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
 
     if (!storedToken || storedToken.revoked || Date.now() > storedToken.expiresAt.getTime()) {
       // Security breach detection: if token is revoked but used, revoke all sessions for this user
-      if (storedToken?.revoked) {
+      // BUT: Allow a small grace period (10s) if it was revoked recently (to handle race conditions)
+      const isRecentlyRevoked = storedToken?.revoked && (Date.now() - storedToken.updatedAt.getTime() < 10000);
+      
+      if (storedToken?.revoked && !isRecentlyRevoked) {
         await db.refreshToken.updateMany({ where: { userId: storedToken.userId }, data: { revoked: true } });
+        res.clearCookie('refresh_token', { path: '/' });
+        res.status(401).json({ error: 'Session compromised.' });
+        return;
       }
-      res.clearCookie('refresh_token');
-      res.status(401).json({ error: 'Session expired or compromised.' });
+
+      if (!isRecentlyRevoked) {
+        res.clearCookie('refresh_token', { path: '/' });
+        res.status(401).json({ error: 'Session expired or invalid.' });
+        return;
+      }
+      
+      // If it's a recently revoked token, we might want to return the new one if we could find it,
+      // but simpler is to just let the client wait for the concurrent request to finish.
+      // For now, we'll return 401 and let the client retry.
+      res.status(401).json({ error: 'Session rotating. Retry.' });
       return;
     }
 
@@ -281,6 +297,7 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
+      path: '/',
       maxAge: REFRESH_TOKEN_EXPIRES_IN
     });
 
@@ -298,7 +315,7 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
       const tokenHash = hashToken(rawToken);
       await db.refreshToken.updateMany({ where: { tokenHash }, data: { revoked: true } });
     }
-    res.clearCookie('refresh_token');
+    res.clearCookie('refresh_token', { path: '/' });
     res.status(200).json({ message: 'Session terminated.' });
   } catch (err) {
     res.status(500).json({ error: 'Logout failure' });

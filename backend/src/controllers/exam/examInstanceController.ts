@@ -35,7 +35,7 @@ export const getExamInstances = async (req: AuthRequest, res: Response): Promise
 export const createExamInstance = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const adminUserId = req.user!.userId;
-        const { name, type, batchId, semester, scheduledDate } = req.body;
+        const { name, type, batchId, semester, scheduledDate, marksDeadline } = req.body;
 
         if (!name || !batchId || !semester) {
             res.status(400).json({ error: 'name, batchId, and semester are required.' });
@@ -49,6 +49,7 @@ export const createExamInstance = async (req: AuthRequest, res: Response): Promi
                 batchId,
                 semester: parseInt(semester),
                 scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+                marksDeadline: marksDeadline ? new Date(marksDeadline) : null,
             },
             include: {
                 batch: { select: { id: true, name: true } }
@@ -76,7 +77,7 @@ export const createExamInstance = async (req: AuthRequest, res: Response): Promi
 export const updateExamStatus = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const id = p(req.params.id);
-        const { status } = req.body;
+        const { status, marksEntryClosed, marksDeadline } = req.body;
         const adminUserId = req.user!.userId;
 
         const validTransitions: Record<string, string[]> = {
@@ -88,16 +89,22 @@ export const updateExamStatus = async (req: AuthRequest, res: Response): Promise
         const instance = await db.examInstance.findUnique({ where: { id } });
         if (!instance) { res.status(404).json({ error: 'Exam instance not found.' }); return; }
 
-        if (!validTransitions[instance.status]?.includes(status)) {
-            res.status(400).json({ error: `Cannot transition from ${instance.status} to ${status}.` });
-            return;
+        const data: any = {};
+        if (status) {
+            if (!validTransitions[instance.status]?.includes(status)) {
+                res.status(400).json({ error: `Cannot transition from ${instance.status} to ${status}.` });
+                return;
+            }
+            data.status = status;
+            if (status === 'LOCKED') {
+                data.lockedAt = new Date();
+                data.lockedBy = adminUserId;
+                data.marksEntryClosed = true;
+            }
         }
 
-        const data: any = { status };
-        if (status === 'LOCKED') {
-            data.lockedAt = new Date();
-            data.lockedBy = adminUserId;
-        }
+        if (marksEntryClosed !== undefined) data.marksEntryClosed = marksEntryClosed;
+        if (marksDeadline !== undefined) data.marksDeadline = marksDeadline ? new Date(marksDeadline) : null;
 
         const updated = await db.examInstance.update({ where: { id }, data });
 

@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { db } from '../../config/db';
 import { AuthRequest } from '../../middleware/authMiddleware';
 import { calculateGrade } from '../../services/promotionService';
+import * as xlsx from 'xlsx';
 
 const p = (v: string | string[] | undefined): string => Array.isArray(v) ? v[0] : (v || '');
 
@@ -17,11 +18,22 @@ export const enterMarks = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
-        // Verify exam is ACTIVE
+        // Verify exam is ACTIVE and not closed/past deadline
         const instance = await db.examInstance.findUnique({ where: { id: examInstanceId } });
         if (!instance) { res.status(404).json({ error: 'Exam instance not found.' }); return; }
+        
         if (instance.status !== 'ACTIVE') {
             res.status(400).json({ error: `Marks can only be entered when exam is ACTIVE. Current: ${instance.status}` });
+            return;
+        }
+
+        if (instance.marksEntryClosed) {
+            res.status(403).json({ error: 'Marks entry has been closed by administrator.' });
+            return;
+        }
+
+        if (instance.marksDeadline && new Date() > instance.marksDeadline) {
+            res.status(403).json({ error: `Marks entry deadline (${instance.marksDeadline.toLocaleDateString()}) has passed.` });
             return;
         }
 
@@ -333,5 +345,165 @@ export const getStudentResults = async (req: AuthRequest, res: Response): Promis
     } catch (error) {
         console.error('Get Student Results Error:', error);
         res.status(500).json({ error: 'Failed to retrieve results.' });
+    }
+};
+
+
+// ─── CSV UPLOAD FOR MARKS ──────────────────────────────────────────────────
+export const uploadMarksCSV = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const teacherId = req.user!.userId;
+        const { examInstanceId, subjectId, componentId, type } = req.body;
+        // type: 'INTERNAL_GROUP', 'MID_SEM', 'QUIZ', 'LAB', 'EXTERNAL'
+
+        if (!req.file) {
+            res.status(400).json({ error: 'CSV file is required.' });
+            return;
+        }
+
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+
+        try {
+            const response = await processExcelData(workbook, {
+                examInstanceId,
+                subjectId,
+                componentId,
+                type,
+                teacherId
+            });
+            res.json(response);
+        } catch (err: any) {
+            res.status(400).json({ error: err.message });
+        }
+
+    } catch (error) {
+        console.error('Upload Marks CSV Error:', error);
+        res.status(500).json({ error: 'Failed to upload marks.' });
+    }
+};
+
+async function processExcelData(workbook: xlsx.WorkBook, context: any) {
+    const { examInstanceId, subjectId, componentId, type, teacherId } = context;
+    const errors: string[] = [];
+    let processed = 0;
+
+    const instance = await db.examInstance.findUnique({
+        where: { id: examInstanceId },
+        include: { batch: { include: { students: true } } }
+    });
+    if (!instance) throw new Error('Exam instance not found.');
+    
+    const students = instance.batch.students;
+    const studentMap = new Map(students.map(s => [s.rollNumber?.toLowerCase(), s.id]));
+
+    const components = await db.examComponent.findMany({
+        where: { schemaId: (await db.subject.findUnique({ where: { id: subjectId } }))?.examSchemaId || '' },
+        include: { questions: true }
+    });
+
+    const processSheet = async (compName: string, sheetName: string, dataRowStart: number, totalColIndex: number, regNoColIndex: number = 1) => {
+        const comp = components.find(c => c.name.toLowerCase().includes(compName.toLowerCase()));
+        if (!comp) return;
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) return;
+        const data: any[][] = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+        for (let i = dataRowStart; i < data.length; i++) {
+            const row = data[i];
+            if (!row || row.length < 2) continue;
+            const rollNumber = String(row[regNoColIndex] || '').trim().toLowerCase();
+            const studentId = studentMap.get(rollNumber);
+            if (!studentId) continue;
+            
+            const totalVal = parseFloat(row[totalColIndex] || '0');
+            if (!isNaN(totalVal)) {
+                await db.studentMark.upsert({
+                    where: { studentId_subjectId_componentId_examInstanceId: { studentId, subjectId, componentId: comp.id, examInstanceId } },
+                    update: { marksObtained: totalVal, enteredBy: teacherId },
+                    create: { studentId, subjectId, componentId: comp.id, examInstanceId, marksObtained: totalVal, enteredBy: teacherId }
+                });
+                processed++;
+            }
+        }
+    };
+
+    if (type === 'INTERNAL_GROUP') {
+        // Parse 4 sheets: MID SEMESTER, QUIZ TEST, ASSIGNMENT, ATTENDANCE
+        await processSheet('mid', 'MID SEMESTER', 8, 20, 1); // Mid Sem: data at index 8 (row 9), total at 20 (col U), regNo at 1 (col B)
+        await processSheet('quiz', 'QUIZ TEST', 9, 4, 2); // Quiz: data at index 9 (row 10), total at 4 (col E), regNo at 2 (col C)
+        await processSheet('assign', 'ASSIGNMENT', 9, 4, 2); // Assign: data at index 9 (row 10), total at 4 (col E), regNo at 2 (col C)
+        await processSheet('attend', 'ATTENDANCE', 8, 4, 2); // Attend: data at index 8 (row 9), total at 4 (col E), regNo at 2 (col C)
+    } else if (type === 'EXTERNAL_GROUP') {
+        const extComp = components.find(c => c.category === 'EXTERNAL');
+        if (extComp) {
+            const sheet = workbook.Sheets['end sem'];
+            if (sheet) {
+                const data: any[][] = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+                for (let i = 7; i < data.length; i++) {
+                    const row = data[i];
+                    if (!row || row.length < 2) continue;
+                    const rollNumber = String(row[1] || '').trim().toLowerCase();
+                    const studentId = studentMap.get(rollNumber);
+                    if (!studentId) continue;
+
+                    const totalVal = parseFloat(row[26] || '0');
+                    if (!isNaN(totalVal)) {
+                        await db.studentMark.upsert({
+                            where: { studentId_subjectId_componentId_examInstanceId: { studentId, subjectId, componentId: extComp.id, examInstanceId } },
+                            update: { marksObtained: totalVal, enteredBy: teacherId },
+                            create: { studentId, subjectId, componentId: extComp.id, examInstanceId, marksObtained: totalVal, enteredBy: teacherId }
+                        });
+                        processed++;
+                    }
+                }
+            }
+        }
+    } else {
+        // Fallback for simple single-sheet CSVs or Excel
+        const sheetName = workbook.SheetNames[0];
+        if (sheetName) {
+            const sheet = workbook.Sheets[sheetName];
+            const data: any[] = xlsx.utils.sheet_to_json(sheet);
+            const comp = components.find(c => c.id === componentId);
+            if (!comp) throw new Error('Component not found.');
+
+            for (const row of data) {
+                const rollNumber = String(row['Roll Number'] || row['rollNumber'] || row['RegNo'] || '').trim().toLowerCase();
+                const studentId = studentMap.get(rollNumber);
+                if (!studentId) continue;
+
+                const val = parseFloat(row['Marks'] || row['marks'] || row['Total'] || row['Final Marks'] || '0');
+                if (!isNaN(val)) {
+                    await db.studentMark.upsert({
+                        where: { studentId_subjectId_componentId_examInstanceId: { studentId, subjectId, componentId: comp.id, examInstanceId } },
+                        update: { marksObtained: val, enteredBy: teacherId },
+                        create: { studentId, subjectId, componentId: comp.id, examInstanceId, marksObtained: val, enteredBy: teacherId }
+                    });
+                    processed++;
+                }
+            }
+        }
+    }
+
+    return { message: `Imported marks successfully.`, processed, errors };
+}
+
+export const getExamInstanceResults = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const id = p(req.params.id);
+        const results = await db.studentResult.findMany({
+            where: { examInstanceId: id },
+            include: {
+                student: { select: { id: true, fullName: true, rollNumber: true } },
+                subject: { select: { id: true, name: true, code: true } }
+            },
+            orderBy: [
+                { student: { rollNumber: 'asc' } },
+                { subject: { name: 'asc' } }
+            ]
+        });
+        res.json({ results });
+    } catch (error) {
+        console.error('Get Exam Instance Results Error:', error);
+        res.status(500).json({ error: 'Failed to retrieve instance results.' });
     }
 };

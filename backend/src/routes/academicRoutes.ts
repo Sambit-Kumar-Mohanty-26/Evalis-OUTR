@@ -10,7 +10,8 @@ import {
     createSchool,
     createBranch, 
     createSemester, 
-    createSubject 
+    createSubject,
+    getSubjects
 } from '../controllers/academic/programController';
 import { getAcademicStructure } from '../controllers/academic/structureController';
 import { protect, authorize } from '../middleware/authMiddleware';
@@ -31,5 +32,6 @@ router.post('/programs', protect, authorize('ADMIN'), createProgram);
 router.post('/branches', protect, authorize('ADMIN'), createBranch);
 router.post('/semesters', protect, authorize('ADMIN'), createSemester);
 router.post('/subjects', protect, authorize('ADMIN'), createSubject);
+router.get('/subjects', protect, getSubjects);
 
 export default router;

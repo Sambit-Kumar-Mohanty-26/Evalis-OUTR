@@ -6,12 +6,24 @@ type AuthHelpers = {
 };
 
 let authHelpers: AuthHelpers = {
-    getToken: () => null,
+    getToken: () => {
+        if (typeof window !== "undefined") {
+            return localStorage.getItem("evalis_access_token");
+        }
+        return null;
+    },
     refreshToken: async () => null,
 };
 class ApiClient {
     setAuthHelpers(helpers: AuthHelpers) {
         authHelpers = helpers;
+    }
+    private isRefreshing = false;
+    private refreshSubscribers: ((token: string) => void)[] = [];
+
+    private onRefreshed(token: string) {
+        this.refreshSubscribers.map((cb) => cb(token));
+        this.refreshSubscribers = [];
     }
 
     private async request<T = any>(
@@ -25,30 +37,55 @@ class ApiClient {
             credentials: "include",
             headers: {
                 "Content-Type": "application/json",
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...(token && endpoint !== "/api/v1/auth/refresh" ? { Authorization: `Bearer ${token}` } : {}),
                 ...options.headers,
             },
         });
 
         if (res.status === 401) {
-            const newToken = await authHelpers.refreshToken();
-            if (newToken) {
-                const retryRes = await fetch(`${API_BASE}${endpoint}`, {
-                    ...options,
-                    credentials: "include",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${newToken}`,
-                        ...options.headers,
-                    },
-                });
-                if (!retryRes.ok) {
-                    const err = await retryRes.json().catch(() => ({ error: "Request failed" }));
-                    throw new Error(err.error || `HTTP ${retryRes.status}`);
-                }
-                return retryRes.json();
+            if (endpoint === "/api/v1/auth/refresh") {
+                throw new Error("Session expired. Please log in again.");
             }
-            throw new Error("Session expired. Please log in again.");
+
+            if (!this.isRefreshing) {
+                this.isRefreshing = true;
+                try {
+                    const newToken = await authHelpers.refreshToken();
+                    if (newToken) {
+                        this.isRefreshing = false;
+                        this.onRefreshed(newToken);
+                    } else {
+                        throw new Error("Refresh failed");
+                    }
+                } catch (err) {
+                    this.isRefreshing = false;
+                    this.refreshSubscribers = [];
+                    throw err;
+                }
+            }
+
+            return new Promise((resolve, reject) => {
+                this.refreshSubscribers.push(async (newToken: string) => {
+                    try {
+                        const retryRes = await fetch(`${API_BASE}${endpoint}`, {
+                            ...options,
+                            credentials: "include",
+                            headers: {
+                                "Content-Type": "application/json",
+                                Authorization: `Bearer ${newToken}`,
+                                ...options.headers,
+                            },
+                        });
+                        if (!retryRes.ok) {
+                            const err = await retryRes.json().catch(() => ({ error: "Request failed" }));
+                            return reject(new Error(err.error || `HTTP ${retryRes.status}`));
+                        }
+                        resolve(retryRes.json());
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+            });
         }
 
         if (!res.ok) {

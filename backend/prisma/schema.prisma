@@ -269,6 +269,20 @@ model ExamComponent {
   schema      ExamSchema @relation(fields: [schemaId], references: [id])
 
   marks       StudentMark[]
+  questions   ExamQuestion[]
+}
+
+model ExamQuestion {
+  id          String        @id @default(cuid())
+  label       String        // e.g. "1(a)", "CO1"
+  maxMarks    Float
+  co          String?       // e.g. "CO1", "CO2"
+  order       Int           @default(0)
+
+  componentId String
+  component   ExamComponent @relation(fields: [componentId], references: [id])
+
+  subMarks    StudentSubMark[]
 }
 
 model ExamInstance {
@@ -282,10 +296,13 @@ model ExamInstance {
   semester      Int        // Which semester this exam covers
 
   scheduledDate DateTime?
+  marksDeadline DateTime?
+  marksEntryClosed Boolean   @default(false)
   lockedAt      DateTime?
   lockedBy      String?
 
   marks         StudentMark[]
+  subMarks      StudentSubMark[]
   results       StudentResult[]
 
   isDeleted     Boolean    @default(false)
@@ -313,6 +330,23 @@ model StudentMark {
   updatedAt       DateTime      @updatedAt
 
   @@unique([studentId, subjectId, componentId, examInstanceId])
+}
+
+model StudentSubMark {
+  id              String        @id @default(cuid())
+  marksObtained   Float
+
+  studentId       String
+  student         User          @relation(fields: [studentId], references: [id])
+  questionId      String
+  question        ExamQuestion  @relation(fields: [questionId], references: [id])
+  examInstanceId  String
+  examInstance    ExamInstance  @relation(fields: [examInstanceId], references: [id])
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([studentId, questionId, examInstanceId])
 }
 
 model StudentResult {
@@ -403,6 +437,7 @@ model User {
   
   // Marks & Results
   marks                 StudentMark[]
+  subMarks              StudentSubMark[]
   results               StudentResult[]
   semesterResults       SemesterResult[]
   promotionLogs         PromotionLog[]
@@ -442,6 +477,7 @@ model RefreshToken {
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 }
 
 model OtpVerification {

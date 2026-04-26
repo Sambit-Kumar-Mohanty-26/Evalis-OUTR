@@ -10,17 +10,20 @@ import { api } from "@/lib/api";
 import { GlassCard } from "@/components/dashboard/GlassCard";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 // --- TYPES ---
-interface Subject { id: string; name: string; code: string; creditHours: number; maxMarks: number; }
+interface Subject { id: string; name: string; code: string; creditHours: number; maxMarks: number; examSchemaId?: string | null; }
 interface Semester { id: string; semesterNumber: number; subjects: Subject[]; }
 interface Branch { id: string; name: string; orgNodeId?: string | null; semesters: Semester[]; }
 interface School { id: string; name: string; orgNodeId?: string | null; branches: Branch[]; }
 interface Program { id: string; name: string; durationYears: number; orgNodeId?: string | null; schools: School[]; }
 interface Version { id: string; name: string; isCurrent: boolean; programs: Program[]; }
 interface OrgNode { id: string; name: string; level: number; durationYears?: number; }
+interface ExamSchema { id: string; name: string; type: string; totalMarks: number; }
 
 export default function AcademicsPage() {
+  const router = useRouter();
   const [versions, setVersions] = useState<Version[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [structure, setStructure] = useState<Version | null>(null);
@@ -31,6 +34,7 @@ export default function AcademicsPage() {
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   
   const [orgNodes, setOrgNodes] = useState<OrgNode[]>([]);
+  const [examSchemas, setExamSchemas] = useState<ExamSchema[]>([]);
   
   // Modal Context
   const [activeModal, setActiveModal] = useState<"VERSION" | "PROGRAM" | "SCHOOL" | "BRANCH" | "SEMESTER" | "SUBJECT" | null>(null);
@@ -67,11 +71,17 @@ export default function AcademicsPage() {
     } catch (e) { console.error("Could not reach organization registry", e); }
   }, []);
 
+  const fetchExamSchemas = useCallback(async () => {
+    try {
+      const res = await api.get<{ schemas: ExamSchema[] }>("/api/v1/exam/schemas");
+      setExamSchemas(res.schemas || []);
+    } catch {}
+  }, []);
+
   const fetchStructure = useCallback(async (versionId: string) => {
     try {
       setLoading(true);
       const res = await api.get(`/api/v1/academic/structure?versionId=${versionId}`);
-      // STABILITY: Only set data, do NOT set selection states here to avoid loops
       setStructure(res);
     } catch (error) {
       toast.error("Failed to decode architectural DNA");
@@ -79,24 +89,21 @@ export default function AcademicsPage() {
     } finally {
       setLoading(false);
     }
-  }, []); // NO selection dependencies here!
+  }, []);
 
-  // Effect: Initial Registry Check
   useEffect(() => { 
-    // Small timeout to allow auth headers to stabilize
     const timer = setTimeout(() => {
       fetchVersions(); 
       fetchOrgNodes();
+      fetchExamSchemas();
     }, 100);
     return () => clearTimeout(timer);
   }, [fetchVersions, fetchOrgNodes]);
   
-  // Effect: Load structure when version changes
   useEffect(() => {
     if (selectedVersionId) fetchStructure(selectedVersionId);
   }, [selectedVersionId, fetchStructure]);
 
-  // Effect: Auto-Sync Selections (Downstream stability)
   useEffect(() => {
     if (!structure || !structure.programs || structure.programs.length === 0) {
       if (structure && structure.programs && structure.programs.length === 0) {
@@ -107,14 +114,12 @@ export default function AcademicsPage() {
       return;
     }
 
-    // 1. Validate Program Selection
     const currentProg = structure.programs.find(p => p.id === selectedProgram);
     if (!currentProg) {
       setSelectedProgram(structure.programs[0].id);
-      return; // Stop here, second run will handle school
+      return;
     }
 
-    // 2. Validate School Selection
     const progSchools = currentProg.schools || [];
     const currentSch = progSchools.find(s => s.id === selectedSchool);
     if (!currentSch && progSchools.length > 0) {
@@ -124,7 +129,6 @@ export default function AcademicsPage() {
       if (selectedSchool !== null) setSelectedSchool(null);
     }
 
-    // 3. Validate Branch Selection
     const schBranches = currentSch?.branches || [];
     const currentBr = schBranches.find(b => b.id === selectedBranch);
     if (!currentBr && schBranches.length > 0) {
@@ -134,9 +138,7 @@ export default function AcademicsPage() {
     }
   }, [structure, selectedProgram, selectedSchool]);
 
-  // Sync Logic Helpers
   const parseYearRange = (name: string): number | null => {
-    // Stricter format: CourseName(YYYY-YYYY)
     const match = name.match(/\((\d{4})[-–—](\d{4})\)$/);
     if (match) {
       const start = parseInt(match[1]);
@@ -160,7 +162,6 @@ export default function AcademicsPage() {
       const mapping: any = {};
       level1Nodes.forEach(n => {
         const nodeDuration = getSmartDuration(n);
-        // If we have a calculated duration from the name, filter out nodes that don't match
         const isMatch = calculatedDuration ? nodeDuration === calculatedDuration : true;
         
         mapping[n.id] = { 
@@ -261,7 +262,6 @@ export default function AcademicsPage() {
     });
   };
 
-  // Safe Selection Derived State
   const currentProgram = useMemo(() => structure?.programs?.find((p) => p.id === selectedProgram), [structure, selectedProgram]);
   const currentSchool = useMemo(() => currentProgram?.schools?.find((s) => s.id === selectedSchool), [currentProgram, selectedSchool]);
   const currentBranch = useMemo(() => currentSchool?.branches?.find((b) => b.id === selectedBranch), [currentSchool, selectedBranch]);
@@ -270,7 +270,6 @@ export default function AcademicsPage() {
     <div className="space-y-8 pb-20 relative overflow-hidden">
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#3D8528]/5 blur-[120px] rounded-full -z-10 translate-x-1/2 -translate-y-1/2" />
 
-      {/* Header & Global Version Selector */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pt-4">
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
           <div className="flex items-center gap-2 mb-2">
@@ -299,28 +298,15 @@ export default function AcademicsPage() {
           </div>
           {selectedVersionId && (
             <div className="flex items-center gap-2">
-              <button 
-                  onClick={handleSyncStructure}
-                  disabled={isSyncing}
-                  className="flex items-center justify-center w-10 h-10 bg-brand-green/5 text-brand-green border border-brand-green/10 rounded-xl hover:bg-brand-green hover:text-white transition-all duration-300 shadow-sm disabled:opacity-50"
-                  title="Sync with Organization Structure"
-              >
+              <button onClick={handleSyncStructure} disabled={isSyncing} className="flex items-center justify-center w-10 h-10 bg-brand-green/5 text-brand-green border border-brand-green/10 rounded-xl hover:bg-brand-green hover:text-white transition-all shadow-sm">
                 {isSyncing ? <div className="w-4 h-4 border-2 border-brand-green/30 border-t-brand-green rounded-full animate-spin" /> : <RefreshCw size={16} />}
               </button>
-              <button 
-                 onClick={handleDeleteVersion}
-                 disabled={isDeleting}
-                 className="flex items-center justify-center w-10 h-10 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-600 hover:text-white transition-all duration-300 shadow-sm disabled:opacity-50"
-                 title="Clear Blueprint Structure"
-              >
+              <button onClick={handleDeleteVersion} disabled={isDeleting} className="flex items-center justify-center w-10 h-10 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm">
                 {isDeleting ? <div className="w-4 h-4 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" /> : <Trash2 size={16} />}
               </button>
             </div>
           )}
-          <button 
-             onClick={() => { setIsSyncEnabled(false); setActiveModal("VERSION"); }}
-             className="flex items-center gap-2 px-6 py-3 bg-[#1C1C1A] text-white rounded-xl hover:bg-brand-green transition-all duration-300 font-bold text-[10px] uppercase tracking-widest shadow-lg shadow-black/10"
-          >
+          <button onClick={() => { setIsSyncEnabled(false); setActiveModal("VERSION"); }} className="flex items-center gap-2 px-6 py-3 bg-[#1C1C1A] text-white rounded-xl hover:bg-brand-green transition-all font-bold text-[10px] uppercase tracking-widest shadow-lg">
             <Plus size={14} /> New Version
           </button>
         </motion.div>
@@ -343,15 +329,12 @@ export default function AcademicsPage() {
                   ) : structure?.programs?.map((program: Program) => (
                     <motion.button
                       key={program.id}
-                      onClick={() => { 
-                        setSelectedProgram(program.id); 
-                        // STABILITY: Selection sync effect handles the downstream reset
-                      }}
+                      onClick={() => setSelectedProgram(program.id)}
                       className={cn(
                         "w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left group",
                         selectedProgram === program.id 
-                          ? "bg-white border-brand-green/20 shadow-xl shadow-[#3D8528]/5" 
-                          : "bg-white/40 border-black/5 hover:bg-white/60 hover:border-black/10"
+                          ? "bg-white border-brand-green/20 shadow-xl" 
+                          : "bg-white/40 border-black/5 hover:bg-white/60"
                       )}
                     >
                        <div className="flex items-center gap-3">
@@ -371,10 +354,7 @@ export default function AcademicsPage() {
                              </div>
                           </div>
                        </div>
-                       <ChevronRight size={16} className={cn(
-                         "transition-transform",
-                         selectedProgram === program.id ? "text-brand-green translate-x-1" : "text-[#1C1C1A]/10"
-                       )} />
+                       <ChevronRight size={16} className={cn("transition-transform", selectedProgram === program.id ? "text-brand-green translate-x-1" : "text-[#1C1C1A]/10")} />
                     </motion.button>
                   ))}
                </div>
@@ -382,35 +362,20 @@ export default function AcademicsPage() {
 
             <AnimatePresence>
             {selectedProgram && (
-               <motion.div 
-                 initial={{ opacity: 0, height: 0 }}
-                 animate={{ opacity: 1, height: 'auto' }}
-                 exit={{ opacity: 0, height: 0 }}
-                 className="space-y-4"
-               >
+               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-4">
                   <div className="flex items-center justify-between ml-4">
                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#1C1C1A]/30">Academic Schools</h3>
                      <button onClick={() => { setModalCtx({ programId: selectedProgram }); setActiveModal("SCHOOL"); }} 
                              className="text-brand-green hover:text-brand-green-hover px-2 text-[10px] uppercase font-bold tracking-widest hover:underline">+ Add</button>
                   </div>
-                  
                   <div className="space-y-2">
                      {!currentProgram?.schools || currentProgram.schools.length === 0 ? (
                          <div className="p-8 text-center text-[10px] text-black/20 uppercase border border-dashed rounded-2xl border-black/10 bg-white/40">No schools established.</div>
                      ) : currentProgram.schools.map((school: School) => (
-                       <button
-                         key={school.id}
-                         onClick={() => setSelectedSchool(school.id)}
-                         className={cn(
-                           "w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left group",
-                           selectedSchool === school.id 
-                             ? "bg-white border-brand-green/20 shadow-md ring-1 ring-brand-green/10" 
-                             : "bg-white/40 border-black/5 hover:bg-white/60"
-                         )}
-                       >
+                       <button key={school.id} onClick={() => setSelectedSchool(school.id)} className={cn("w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left group", selectedSchool === school.id ? "bg-white border-brand-green/20 shadow-md ring-1 ring-brand-green/10" : "bg-white/40 border-black/5 hover:bg-white/60")}>
                           <div>
                             <p className={cn("text-[12px] font-bold transition-colors", selectedSchool===school.id ? "text-brand-green" : "text-[#1C1C1A] group-hover:text-brand-green")}>{school.name}</p>
-                            {school.orgNodeId && <span className="text-[8px] font-black text-brand-green/40 uppercase tracking-tighter">Mapped to Organization</span>}
+                            {school.orgNodeId && <span className="text-[8px] font-black text-brand-green/40 uppercase tracking-tighter">Mapped</span>}
                           </div>
                           {selectedSchool === school.id && <div className="w-1.5 h-1.5 rounded-full bg-brand-green shadow-[0_0_8px_rgba(61,133,40,0.6)]" />}
                        </button>
@@ -422,32 +387,17 @@ export default function AcademicsPage() {
 
             <AnimatePresence>
             {selectedSchool && (
-               <motion.div 
-                 initial={{ opacity: 0, height: 0 }}
-                 animate={{ opacity: 1, height: 'auto' }}
-                 exit={{ opacity: 0, height: 0 }}
-                 className="space-y-4"
-               >
+               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-4">
                   <div className="flex items-center justify-between ml-4">
                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#1C1C1A]/30">Specializations / Branches</h3>
                      <button onClick={() => { setModalCtx({ schoolId: selectedSchool }); setActiveModal("BRANCH"); }} 
                              className="text-brand-green hover:text-brand-green-hover px-2 text-[10px] uppercase font-bold tracking-widest hover:underline">+ Add</button>
                   </div>
-                  
                   <div className="space-y-2">
                      {!currentSchool?.branches || currentSchool.branches.length === 0 ? (
                          <div className="p-8 text-center text-[10px] text-black/20 uppercase border border-dashed rounded-2xl border-black/10 bg-white/40">No branches mapped.</div>
                      ) : currentSchool.branches.map((branch: Branch) => (
-                       <button
-                         key={branch.id}
-                         onClick={() => setSelectedBranch(branch.id)}
-                         className={cn(
-                           "w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left group",
-                           selectedBranch === branch.id 
-                             ? "bg-white border-brand-green/20 shadow-md ring-1 ring-brand-green/10" 
-                             : "bg-white/40 border-black/5 hover:bg-white/60"
-                         )}
-                       >
+                       <button key={branch.id} onClick={() => setSelectedBranch(branch.id)} className={cn("w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left group", selectedBranch === branch.id ? "bg-white border-brand-green/20 shadow-md ring-1 ring-brand-green/10" : "bg-white/40 border-black/5 hover:bg-white/60")}>
                           <div>
                             <p className={cn("text-[12px] font-bold transition-colors", selectedBranch===branch.id ? "text-brand-green" : "text-[#1C1C1A] group-hover:text-brand-green")}>{branch.name}</p>
                             {branch.orgNodeId && <span className="text-[8px] font-black text-brand-green/40 uppercase tracking-tighter">Mapped</span>}
@@ -468,22 +418,13 @@ export default function AcademicsPage() {
                      <div className="w-8 h-8 border-2 border-brand-green/20 border-t-brand-green rounded-full animate-spin" />
                   </motion.div>
                ) : selectedBranch ? (
-                 <motion.div
-                   key={selectedBranch}
-                   initial={{ opacity: 0, y: 20 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   exit={{ opacity: 0, y: -20 }}
-                   className="space-y-6"
-                 >
+                 <motion.div key={selectedBranch} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-6">
                     <div className="flex items-center justify-between p-3 bg-white/60 backdrop-blur-md border border-brand-green/10 rounded-2xl shadow-sm">
                        <div className="flex items-center gap-3 px-4">
                           <BookOpen size={16} className="text-[#3D8528]" />
                           <p className="text-[11px] font-black uppercase tracking-widest text-[#1C1C1A]/60">Syllabus Explorer</p>
                        </div>
-                       <button 
-                         onClick={() => { setModalCtx({ branchId: selectedBranch }); setActiveModal("SEMESTER"); }}
-                         className="flex items-center gap-2 px-4 py-2.5 bg-brand-green text-white rounded-xl hover:bg-brand-green-hover transition-all text-[10px] uppercase font-black tracking-widest shadow-md shadow-brand-green/20"
-                       >
+                       <button onClick={() => { setModalCtx({ branchId: selectedBranch }); setActiveModal("SEMESTER"); }} className="flex items-center gap-2 px-4 py-2.5 bg-brand-green text-white rounded-xl hover:bg-brand-green-hover transition-all text-[10px] uppercase font-black tracking-widest shadow-md">
                           <Plus size={14} /> Add Semester
                        </button>
                     </div>
@@ -495,42 +436,34 @@ export default function AcademicsPage() {
                              <p className="text-xs font-serif italic text-black/40">Add a semester to begin constructing the syllabus for this branch.</p>
                           </div>
                        ) : (
-                         (currentBranch?.semesters || []).slice().sort((a,b)=>a.semesterNumber-b.semesterNumber).map((semester: Semester, sIdx: number) => (
-                           <motion.div key={semester.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: sIdx * 0.05 }}>
-                              <div className="bg-white/40 backdrop-blur-xl border border-black/5 rounded-[32px] overflow-hidden hover:border-brand-green/20 shadow-sm hover:shadow-xl transition-all duration-500">
-                                 <div className="p-4 bg-gradient-to-r from-[#F8F7F4] to-white border-b border-black/5 flex items-center justify-between">
-                                    <h4 className="text-[13px] font-black uppercase tracking-tighter text-[#1C1C1A]">Semester {semester.semesterNumber}</h4>
-                                    <span className="bg-white px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest text-brand-green border border-brand-green/10 shadow-sm">
-                                      {semester.subjects?.length || 0} Units
-                                    </span>
-                                 </div>
-                                 <div className="p-4 space-y-3 bg-white/40">
-                                    {semester.subjects?.map((subject) => (
-                                      <div key={subject.id} className="group relative flex items-center justify-between p-3 bg-white border border-black/5 rounded-xl hover:border-brand-green/30 transition-all shadow-sm">
-                                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-green rounded-l-xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                                         <div className="space-y-1 pl-1">
-                                            <p className="text-[12px] font-bold text-[#1C1C1A]">{subject.name}</p>
-                                            <div className="flex items-center gap-2">
-                                               <span className="text-[9px] font-black text-[#1C1C1A]/40 uppercase tracking-widest">{subject.code}</span>
-                                               <span className="text-[14px] leading-none opacity-20">/</span>
-                                               <span className="text-[9px] font-black text-brand-green uppercase tracking-widest">{subject.creditHours} Credits</span>
-                                            </div>
-                                         </div>
-                                         <div className="flex flex-col items-end gap-2 text-right">
-                                             <span className="text-[9px] text-[#1C1C1A]/20 font-black uppercase">{subject.maxMarks} Mk</span>
-                                         </div>
-                                      </div>
-                                    ))}
-                                    <button 
-                                        onClick={() => { setModalCtx({ semesterId: semester.id }); setActiveModal("SUBJECT"); }}
-                                        className="w-full py-3 border border-dashed border-black/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/30 hover:bg-brand-green/5 hover:text-brand-green hover:border-brand-green/30 transition-all shadow-sm"
-                                    >
-                                       + Map Subject
-                                    </button>
-                                 </div>
-                              </div>
-                           </motion.div>
-                         ))
+                          (currentBranch?.semesters || []).slice().sort((a,b)=>a.semesterNumber-b.semesterNumber).map((semester: Semester, sIdx: number) => (
+                            <motion.div 
+                              key={semester.id} 
+                              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: sIdx * 0.05 }}
+                              onClick={() => router.push(`/dashboard/academics/semester/${semester.id}`)}
+                              className="cursor-pointer group"
+                            >
+                               <div className="bg-white/40 backdrop-blur-xl border border-black/5 rounded-[32px] overflow-hidden hover:border-brand-green/20 shadow-sm hover:shadow-xl transition-all duration-500">
+                                  <div className="p-6 bg-gradient-to-r from-[#F8F7F4] to-white border-b border-black/5 flex items-center justify-between">
+                                     <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-2xl bg-brand-green/5 flex items-center justify-center text-brand-green group-hover:bg-brand-green group-hover:text-white transition-all duration-300">
+                                           <Layers size={18} />
+                                        </div>
+                                        <h4 className="text-[14px] font-black uppercase tracking-tighter text-[#1C1C1A]">Semester {semester.semesterNumber}</h4>
+                                     </div>
+                                     <span className="bg-white px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest text-brand-green border border-brand-green/10 shadow-sm group-hover:border-brand-green/30 transition-all">
+                                       {semester.subjects?.length || 0} Units Mapped
+                                     </span>
+                                  </div>
+                                  <div className="p-6 bg-white/40 flex items-center justify-center border-t border-black/[0.02]">
+                                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/30 group-hover:text-brand-green transition-all">
+                                        <span>View Subjects</span>
+                                        <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                                     </div>
+                                  </div>
+                               </div>
+                            </motion.div>
+                          ))
                        )}
                     </div>
                  </motion.div>
@@ -549,25 +482,17 @@ export default function AcademicsPage() {
          </div>
       </div>
 
-      {/* Modal Engine (Fixed Sync Interface) */}
       <AnimatePresence>
         {activeModal && (
           <>
-            <motion.div 
-               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-               onClick={() => setActiveModal(null)}
-               className="fixed inset-0 bg-[#1A2B3D]/30 backdrop-blur-md z-50" 
-            />
-            <motion.div 
-               initial={{ x: "100%", opacity: 0.5 }} animate={{ x: 0, opacity: 1 }} exit={{ x: "100%", opacity: 0.5 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
-               className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-[#F4F2EB] border-l border-white/50 shadow-2xl z-[60] flex flex-col"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveModal(null)} className="fixed inset-0 bg-[#1A2B3D]/30 backdrop-blur-md z-50" />
+            <motion.div initial={{ x: "100%", opacity: 0.5 }} animate={{ x: 0, opacity: 1 }} exit={{ x: "100%", opacity: 0.5 }} className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-[#F4F2EB] border-l border-white/50 shadow-2xl z-[60] flex flex-col">
                <div className="p-8 border-b border-black/5 bg-white/40 backdrop-blur-xl flex items-center justify-between">
                   <div>
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-brand-green mb-1">Configuration</h3>
                     <h2 className="text-2xl font-serif text-[#1C1C1A]">Add New {activeModal.charAt(0) + activeModal.slice(1).toLowerCase()}</h2>
                   </div>
-                  <button onClick={() => setActiveModal(null)} className="p-2 bg-white hover:bg-black/5 rounded-full border border-black/5 transition-all shadow-sm text-black/40 hover:text-black">
+                  <button onClick={() => setActiveModal(null)} className="p-2 bg-white rounded-full border border-black/5 text-black/40 hover:text-black">
                     <X size={16} />
                   </button>
                </div>
@@ -577,7 +502,6 @@ export default function AcademicsPage() {
                      e.preventDefault();
                      const formData = new FormData(e.currentTarget);
                      const payload: any = Object.fromEntries(formData.entries());
-                     
                      if (payload.durationYears) payload.durationYears = parseInt(payload.durationYears);
                      if (payload.semesterNumber) payload.semesterNumber = parseInt(payload.semesterNumber);
                      if (payload.creditHours) payload.creditHours = parseInt(payload.creditHours);
@@ -597,18 +521,7 @@ export default function AcademicsPage() {
                         <>
                           <div className="space-y-2">
                             <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Blueprint Name</label>
-                            <input 
-                              name="name" 
-                              required 
-                              placeholder="e.g. B.Tech(2023-2027)" 
-                              pattern="^.+\(\d{4}-\d{4}\)$"
-                              title="Format: CourseName(YYYY-YYYY)"
-                              onChange={(e) => {
-                                const dur = parseYearRange(e.target.value);
-                                setCalculatedDuration(dur);
-                              }}
-                              className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" 
-                            />
+                            <input name="name" required placeholder="e.g. B.Tech(2023-2027)" pattern="^.+\(\d{4}-\d{4}\)$" title="Format: CourseName(YYYY-YYYY)" onChange={(e) => setCalculatedDuration(parseYearRange(e.target.value))} className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold outline-none" />
                           </div>
                           
                           <div className="flex flex-col gap-3 p-4 bg-white border border-black/5 rounded-3xl shadow-sm">
@@ -619,20 +532,15 @@ export default function AcademicsPage() {
                                 </div>
                                 <label className="relative inline-flex items-center cursor-pointer">
                                   <input type="checkbox" checked={isSyncEnabled} onChange={(e) => setIsSyncEnabled(e.target.checked)} className="sr-only peer" />
-                                  <div className="w-9 h-5 bg-black/5 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-green"></div>
+                                  <div className="w-9 h-5 bg-black/5 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-green"></div>
                                 </label>
                              </div>
-                             <p className="text-[9px] font-medium text-[#1C1C1A]/40 leading-relaxed">Automatically generate your academic hierarchy from the current organizational structure.</p>
+                             <p className="text-[9px] font-medium text-[#1C1C1A]/40 leading-relaxed">Automatically generate hierarchy from organizational structure.</p>
                           </div>
 
                           <AnimatePresence>
                              {isSyncEnabled && (
-                                <motion.div 
-                                  initial={{ height: 0, opacity: 0 }} 
-                                  animate={{ height: 'auto', opacity: 1 }} 
-                                  exit={{ height: 0, opacity: 0 }}
-                                  className="overflow-hidden space-y-4"
-                                >
+                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden space-y-4">
                                    <div className="flex items-center gap-2 px-2 py-1 bg-brand-green/5 rounded-lg">
                                       <Info size={12} className="text-brand-green" />
                                       <span className="text-[9px] font-bold uppercase tracking-tighter text-brand-green/60">Confirm Syllabus Durations</span>
@@ -641,22 +549,12 @@ export default function AcademicsPage() {
                                        {Object.entries(syncMapping).map(([id, item]) => {
                                           const isMismatch = calculatedDuration !== null && item.duration !== calculatedDuration;
                                           return (
-                                            <div key={id} className={cn(
-                                                "p-4 rounded-2xl border transition-all flex items-center justify-between gap-4", 
-                                                item.enabled ? "bg-white border-brand-green/20 shadow-sm" : "bg-black/5 border-transparent opacity-50",
-                                                isMismatch && "opacity-30 grayscale pointer-events-none"
-                                            )}>
+                                            <div key={id} className={cn("p-4 rounded-2xl border transition-all flex items-center justify-between gap-4", item.enabled ? "bg-white border-brand-green/20 shadow-sm" : "bg-black/5 border-transparent opacity-50", isMismatch && "opacity-30 grayscale pointer-events-none")}>
                                                <div className="flex items-center gap-3">
-                                                  <input 
-                                                     type="checkbox" 
-                                                     checked={item.enabled && !isMismatch} 
-                                                     disabled={isMismatch}
-                                                     onChange={(e) => setSyncMapping(prev => ({ ...prev, [id]: { ...prev[id], enabled: e.target.checked } }))}
-                                                     className="w-4 h-4 rounded border-black/10 text-brand-green focus:ring-brand-green"
-                                                  />
+                                                  <input type="checkbox" checked={item.enabled && !isMismatch} disabled={isMismatch} onChange={(e) => setSyncMapping(prev => ({ ...prev, [id]: { ...prev[id], enabled: e.target.checked } }))} className="w-4 h-4 rounded text-brand-green" />
                                                   <span className="text-[12px] font-bold text-[#1C1C1A]">{item.name}</span>
                                                </div>
-                                               <div className="flex items-center gap-2 px-3 py-1 bg-black/5 rounded-xl border border-black/5">
+                                               <div className="flex items-center gap-2 px-3 py-1 bg-black/5 rounded-xl border">
                                                   <span className="text-[11px] font-black text-brand-green">{item.duration}</span>
                                                   <span className="text-[9px] font-black text-[#1C1C1A]/30 uppercase">Yrs</span>
                                                </div>
@@ -669,7 +567,7 @@ export default function AcademicsPage() {
                           </AnimatePresence>
 
                           <label className="flex items-center gap-3 cursor-pointer p-4 bg-white border border-black/5 rounded-2xl">
-                              <input type="checkbox" name="isCurrent" className="w-4 h-4 text-brand-green border-black/20 focus:ring-brand-green rounded outline-none" />
+                              <input type="checkbox" name="isCurrent" className="w-4 h-4 text-brand-green rounded outline-none" />
                              <span className="text-xs font-bold text-[#1C1C1A]">Mark as Active Batch (Multiple Allowed)</span>
                           </label>
                         </>
@@ -679,14 +577,14 @@ export default function AcademicsPage() {
                          <>
                            <div className="space-y-2">
                             <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Course Name</label>
-                            <input name="name" required placeholder="e.g. Bachelor of Technology" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
+                            <input name="name" required placeholder="e.g. Bachelor of Technology" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold outline-none" />
                           </div>
                           <div className="space-y-2">
                             <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Duration (Years)</label>
-                            <input name="durationYears" type="number" min={1} max={10} required placeholder="e.g. 4" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
+                            <input name="durationYears" type="number" min={1} max={10} required placeholder="e.g. 4" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold outline-none" />
                           </div>
                           <div className="space-y-2">
-                             <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Map to Organization (Course Level)</label>
+                             <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Map to Organization</label>
                              <select name="orgNodeId" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[12px] font-bold outline-none">
                                 <option value="">No Mapping</option>
                                 {orgNodes.filter(n => n.level === 1).map(n => (
@@ -701,10 +599,10 @@ export default function AcademicsPage() {
                         <>
                            <div className="space-y-2">
                              <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">School Name</label>
-                             <input name="name" required placeholder="e.g. School of Engineering" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
+                             <input name="name" required placeholder="e.g. School of Engineering" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold outline-none" />
                            </div>
                            <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Map to Org School Node</label>
+                              <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Map to Org School</label>
                               <select name="orgNodeId" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[12px] font-bold outline-none">
                                  <option value="">No Mapping</option>
                                  {orgNodes.filter(n => n.level === 2).map(n => (
@@ -719,10 +617,10 @@ export default function AcademicsPage() {
                         <>
                            <div className="space-y-2">
                              <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Branch Name</label>
-                             <input name="name" required placeholder="e.g. Computer Science Engineering" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
+                             <input name="name" required placeholder="e.g. Computer Science Engineering" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold outline-none" />
                            </div>
                            <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Map to Org Branch/Dept</label>
+                              <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Map to Org Branch</label>
                               <select name="orgNodeId" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[12px] font-bold outline-none">
                                  <option value="">No Mapping</option>
                                  {orgNodes.filter(n => n.level === 3).map(n => (
@@ -736,35 +634,12 @@ export default function AcademicsPage() {
                      {activeModal === "SEMESTER" && (
                         <div className="space-y-2">
                           <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Semester Number</label>
-                          <input name="semesterNumber" type="number" min={1} max={20} required placeholder="e.g. 1" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
+                          <input name="semesterNumber" type="number" min={1} max={20} required placeholder="e.g. 1" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold outline-none" />
                         </div>
                      )}
 
-                     {activeModal === "SUBJECT" && (
-                        <>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Subject Name</label>
-                            <input name="name" required placeholder="e.g. Engineering Mathematics I" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Subject Code</label>
-                            <input name="code" required placeholder="e.g. MATH101" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                             <div className="space-y-2">
-                               <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Credit Hours</label>
-                               <input name="creditHours" type="number" min={1} max={20} required placeholder="e.g. 4" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
-                             </div>
-                             <div className="space-y-2">
-                               <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40">Max Marks</label>
-                               <input name="maxMarks" type="number" min={1} max={1000} defaultValue={100} required placeholder="e.g. 100" className="w-full p-4 bg-white border border-black/5 rounded-2xl text-[13px] font-bold focus:ring-2 focus:ring-brand-green/20 outline-none transition-all" />
-                             </div>
-                          </div>
-                        </>
-                     )}
-
                      <div className="pt-8">
-                        <button disabled={isSubmitting} type="submit" className="w-full flex items-center justify-center gap-2 py-4 bg-[#1C1C1A] text-white rounded-2xl hover:bg-brand-green transition-all shadow-xl shadow-black/10 group font-bold text-[11px] uppercase tracking-widest disabled:opacity-50">
+                        <button disabled={isSubmitting} type="submit" className="w-full flex items-center justify-center gap-2 py-4 bg-[#1C1C1A] text-white rounded-2xl hover:bg-brand-green transition-all shadow-xl group font-bold text-[11px] uppercase tracking-widest disabled:opacity-50">
                            {isSubmitting ? "Finalizing Matrix..." : "Confirm Configuration"}
                            {!isSubmitting && <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />}
                         </button>
