@@ -93,8 +93,8 @@ export default function OnboardSetupPage() {
                 map.set(normalizedName, school);
             }
             return map;
-        }, new Map()).values()
-    );
+        }, new Map<string, any>()).values()
+    ) as any[];
     const branches = schools.find((s: any) => s.id === selectedSchool)?.branches || [];
 
     return (

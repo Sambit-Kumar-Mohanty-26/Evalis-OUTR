@@ -20,6 +20,7 @@ interface CustomSelectProps {
     className?: string;
     error?: string;
     compact?: boolean;
+    disabled?: boolean;
 }
 
 export function CustomSelect({ 
@@ -30,7 +31,8 @@ export function CustomSelect({
     label,
     className,
     error,
-    compact = false
+    compact = false,
+    disabled = false
 }: CustomSelectProps) {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -97,12 +99,14 @@ export function CustomSelect({
             {/* Trigger */}
             <motion.button
                 type="button"
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                disabled={disabled}
                 className={cn(
                     "w-full flex items-center justify-between bg-white/[0.03] border border-[#1C1C1A]/[0.05] rounded-2xl transition-all duration-300",
                     compact ? "px-4 py-2.5" : "px-5 py-3.5",
                     isOpen ? "bg-white/10 ring-2 ring-brand-green/20 border-brand-green/30" : "hover:bg-white/5 hover:border-[#1C1C1A]/10",
-                    error && "border-red-500/50 bg-red-500/[0.02]"
+                    error && "border-red-500/50 bg-red-500/[0.02]",
+                    disabled && "opacity-50 cursor-not-allowed"
                 )}
             >
                 <span className={cn(
