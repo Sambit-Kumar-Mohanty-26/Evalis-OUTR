@@ -179,7 +179,7 @@ export default function UsersPage() {
 
     const handleResetPassword = async (userId: string) => {
         toast.warning("Reset Password?", {
-            description: "This will set the user's password to Evalis@2024.",
+            description: "This will set the user's password to Evalis@2026.",
             action: {
                 label: "Reset",
                 onClick: async () => {

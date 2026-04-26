@@ -360,7 +360,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess, activeTab }: 
 
                         <div className="px-8 py-5 border-t border-[#1C1C1A]/5 flex items-center justify-between bg-white/40">
                             <p className="text-[10px] text-[#1C1C1A]/30 font-medium">
-                                Default Password: <span className="font-mono font-bold text-[#1C1C1A]/60">Evalis@2024</span>
+                                Default Password: <span className="font-mono font-bold text-[#1C1C1A]/60">Evalis@2026</span>
                             </p>
                             <div className="flex gap-3">
                                 <button

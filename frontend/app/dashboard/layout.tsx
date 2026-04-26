@@ -17,8 +17,12 @@ export default function DashboardLayout({
     const router = useRouter();
 
     useEffect(() => {
-        if (!isLoading && !user) {
-            router.push("/login");
+        if (!isLoading) {
+            if (!user) {
+                router.push("/login");
+            } else if (user.onboardingRequired) {
+                router.push("/onboard/setup");
+            }
         }
     }, [user, isLoading, router]);
 

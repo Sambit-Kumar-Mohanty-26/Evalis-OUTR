@@ -7,8 +7,10 @@ import { api } from "./api";
 interface User {
     id: string;
     fullName: string;
-    role: "ADMIN" | "TEACHER" | "STUDENT";
+    role: "ADMIN" | "TEACHER" | "STUDENT" | "ADVISOR" | "HEAD_OF_SCHOOL";
     tenantId: string;
+    tenantName: string;
+    onboardingRequired?: boolean;
 }
 
 interface AuthContextType {
@@ -64,6 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             fullName: data.user.fullName,
             role: data.user.role,
             tenantId: data.user.tenantId,
+            tenantName: data.user.tenantName,
+            onboardingRequired: data.user.onboardingRequired,
         };
 
         setAccessToken(data.accessToken);
@@ -72,10 +76,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("evalis_user", JSON.stringify(userData));
 
         // Role-based redirect
+        if (userData.onboardingRequired) {
+            router.push("/onboard/setup");
+            return;
+        }
+
         switch (userData.role) {
             case "ADMIN":
             case "TEACHER":
             case "STUDENT":
+            case "ADVISOR":
+            case "HEAD_OF_SCHOOL":
                 router.push("/dashboard");
                 break;
         }

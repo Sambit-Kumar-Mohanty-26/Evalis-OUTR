@@ -8,6 +8,8 @@ export interface AuthRequest extends Request {
         userId: string;
         role: string;
         tenantId: string;
+        email: string;
+        onboardingRequired: boolean;
     };
 }
 

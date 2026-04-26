@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import emailjs from '@emailjs/nodejs';
 import bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
+import { createAuditLog } from '../../utils/auditLogger';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'evalis_hyper_secret_jwt_2024';
 const JWT_EXPIRES_IN = '15m';
@@ -12,6 +13,7 @@ const REFRESH_TOKEN_EXPIRES_IN = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
 const generateRefreshToken = () => crypto.randomBytes(40).toString('hex');
+const DEFAULT_PASSWORD = 'Evalis@2026';
 
 export const sendOtp = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -187,14 +189,23 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
-    const user = await db.user.findUnique({ where: { email } });
+    const user = await db.user.findUnique({ 
+      where: { email },
+      include: { tenant: true }
+    });
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       res.status(401).json({ error: 'Credential mismatch.' });
       return;
     }
 
     const accessToken = jwt.sign(
-      { userId: user.id, role: user.role, tenantId: user.tenantId },
+      { 
+        userId: user.id, 
+        role: user.role, 
+        tenantId: user.tenantId,
+        email: user.email,
+        onboardingRequired: user.onboardingRequired 
+      },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
@@ -221,9 +232,26 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       maxAge: REFRESH_TOKEN_EXPIRES_IN
     });
 
+    // Log the event
+    await createAuditLog(
+      user.id,
+      'LOGIN',
+      'User',
+      user.id,
+      { email: user.email },
+      req.ip
+    );
+
     res.status(200).json({
       accessToken,
-      user: { id: user.id, fullName: user.fullName, role: user.role, tenantId: user.tenantId }
+      user: { 
+        id: user.id, 
+        fullName: user.fullName, 
+        role: user.role, 
+        tenantId: user.tenantId,
+        tenantName: user.tenant.name,
+        onboardingRequired: user.onboardingRequired
+      }
     });
   } catch (error) {
     console.error('Login Error:', error);
@@ -242,7 +270,7 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
     const tokenHash = hashToken(rawToken);
     const storedToken = await db.refreshToken.findUnique({
       where: { tokenHash },
-      include: { user: true }
+      include: { user: { include: { tenant: true } } }
     });
 
     if (!storedToken || storedToken.revoked || Date.now() > storedToken.expiresAt.getTime()) {
@@ -288,7 +316,13 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
     });
 
     const newAccessToken = jwt.sign(
-      { userId: storedToken.user.id, role: storedToken.user.role, tenantId: storedToken.user.tenantId },
+      { 
+        userId: storedToken.user.id, 
+        role: storedToken.user.role, 
+        tenantId: storedToken.user.tenantId,
+        email: storedToken.user.email,
+        onboardingRequired: storedToken.user.onboardingRequired
+      },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
@@ -319,5 +353,55 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
     res.status(200).json({ message: 'Session terminated.' });
   } catch (err) {
     res.status(500).json({ error: 'Logout failure' });
+  }
+};
+
+export const qrRegister = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { fullName, email, role, tenantId, preAuthToken } = req.body;
+
+    if (!preAuthToken || !tenantId) {
+      res.status(401).json({ error: 'Verification or tenant context missing.' });
+      return;
+    }
+
+    // Verify pre-auth token
+    let decoded: any;
+    try {
+      decoded = jwt.verify(preAuthToken, JWT_SECRET);
+      if (decoded.email !== email || !decoded.verified) throw new Error();
+    } catch {
+      res.status(403).json({ error: 'Integrity breach. Re-verify email.' });
+      return;
+    }
+
+    // Check if user already exists
+    const existingUser = await db.user.findUnique({ where: { email } });
+    if (existingUser) {
+      res.status(400).json({ error: 'Identity already registered in grid.' });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 12);
+
+    const user = await db.user.create({
+      data: {
+        fullName,
+        email,
+        passwordHash,
+        role: role as any,
+        tenantId,
+        onboardingRequired: true,
+        status: 'ACTIVE'
+      }
+    });
+
+    res.status(201).json({
+      message: 'Institutional identity synthesized. Please login with default credentials.',
+      user: { id: user.id, role: user.role }
+    });
+  } catch (error) {
+    console.error('QR Register Error:', error);
+    res.status(500).json({ error: 'Failed to synthesize identity' });
   }
 };

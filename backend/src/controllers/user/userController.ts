@@ -4,8 +4,10 @@ import { db } from '../../config/db';
 import bcrypt from 'bcrypt';
 import { Readable } from 'stream';
 import csv from 'csv-parser';
+import { createAuditLog } from '../../utils/auditLogger';
+import { AuditAction } from '@prisma/client';
 
-const DEFAULT_PASSWORD = 'Evalis@2024';
+const DEFAULT_PASSWORD = 'Evalis@2026';
 
 const getSingleParam = (value: string | string[] | undefined): string | undefined => {
     if (Array.isArray(value)) {
@@ -237,15 +239,14 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
         });
 
         // Audit Log
-        await db.auditLog.create({
-            data: {
-                userId,
-                action: 'CREATE',
-                entity: 'User',
-                entityId: user.id,
-                metadata: { fullName, email, role, createdBy: userId } as any
-            }
-        });
+        await createAuditLog(
+            userId,
+            'CREATE',
+            'User',
+            user.id,
+            { fullName, email, role, createdBy: userId },
+            req.ip
+        );
 
         res.status(201).json(user);
     } catch (error) {
@@ -317,15 +318,14 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
             }
         });
 
-        await db.auditLog.create({
-            data: {
-                userId: adminUserId,
-                action: 'UPDATE',
-                entity: 'User',
-                entityId: id,
-                metadata: updateData
-            }
-        });
+        await createAuditLog(
+            adminUserId,
+            'UPDATE',
+            'User',
+            id,
+            updateData,
+            req.ip
+        );
 
         res.json(user);
     } catch (error) {
@@ -354,15 +354,14 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
             data: { isDeleted: true, status: 'INACTIVE' }
         });
 
-        await db.auditLog.create({
-            data: {
-                userId: adminUserId,
-                action: 'DELETE',
-                entity: 'User',
-                entityId: id,
-                metadata: { deletedBy: adminUserId, softDelete: true } as any
-            }
-        });
+        await createAuditLog(
+            adminUserId,
+            'DELETE',
+            'User',
+            id,
+            { deletedBy: adminUserId, softDelete: true },
+            req.ip
+        );
 
         res.json({ message: 'User deactivated successfully.' });
     } catch (error) {
@@ -388,15 +387,14 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
             data: { passwordHash }
         });
 
-        await db.auditLog.create({
-            data: {
-                userId: adminUserId,
-                action: 'UPDATE',
-                entity: 'User',
-                entityId: id,
-                metadata: { action: 'PASSWORD_RESET', resetBy: adminUserId } as any
-            }
-        });
+        await createAuditLog(
+            adminUserId,
+            'UPDATE',
+            'User',
+            id,
+            { action: 'PASSWORD_RESET', resetBy: adminUserId },
+            req.ip
+        );
 
         res.json({ message: 'Password reset to default.' });
     } catch (error) {
@@ -432,15 +430,14 @@ export const assignAdmin = async (req: AuthRequest, res: Response): Promise<void
             }
         });
 
-        await db.auditLog.create({
-            data: {
-                userId: adminUserId,
-                action: 'UPDATE',
-                entity: 'User',
-                entityId: id,
-                metadata: { action: 'ASSIGN_ADMIN', nodeId, assignedBy: adminUserId } as any
-            }
-        });
+        await createAuditLog(
+            adminUserId,
+            'UPDATE',
+            'User',
+            id,
+            { action: 'ASSIGN_ADMIN', nodeId, assignedBy: adminUserId },
+            req.ip
+        );
 
         res.json(user);
     } catch (error) {
@@ -475,15 +472,14 @@ export const removeAdmin = async (req: AuthRequest, res: Response): Promise<void
             }
         });
 
-        await db.auditLog.create({
-            data: {
-                userId: adminUserId,
-                action: 'UPDATE',
-                entity: 'User',
-                entityId: id,
-                metadata: { action: 'REMOVE_ADMIN', nodeId, removedBy: adminUserId } as any
-            }
-        });
+        await createAuditLog(
+            adminUserId,
+            'UPDATE',
+            'User',
+            id,
+            { action: 'REMOVE_ADMIN', nodeId, removedBy: adminUserId },
+            req.ip
+        );
 
         res.json(user);
     } catch (error) {
@@ -713,22 +709,21 @@ export const bulkUploadUsers = async (req: AuthRequest, res: Response): Promise<
         }
 
         // Audit Log
-        await db.auditLog.create({
-            data: {
-                userId: adminUserId,
-                action: 'CREATE',
-                entity: 'User',
-                entityId: 'BULK',
-                metadata: {
-                    action: 'BULK_UPLOAD',
-                    role,
-                    totalRows: rows.length,
-                    created,
-                    failed: rows.length - created,
-                    errors: errors.slice(0, 20)
-                } as any
-            }
-        });
+        await createAuditLog(
+            adminUserId,
+            'CREATE',
+            'User',
+            'BULK',
+            {
+                action: 'BULK_UPLOAD',
+                role,
+                totalRows: rows.length,
+                created,
+                failed: rows.length - created,
+                errors: errors.slice(0, 20)
+            },
+            req.ip
+        );
 
         res.status(201).json({
             message: `Bulk upload complete. ${created}/${rows.length} users created.`,

@@ -43,6 +43,28 @@ export default function DashboardOverview() {
         ));
     };
 
+    if (user?.role !== "ADMIN") {
+        return (
+            <div className="h-[calc(100vh-12rem)] flex flex-col items-center justify-center space-y-6">
+                <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="w-32 h-32 rounded-full bg-brand-green/5 flex items-center justify-center text-brand-green"
+                >
+                    <AlertCircle size={64} strokeWidth={1} />
+                </motion.div>
+                <div className="text-center space-y-2">
+                    <h1 className="text-4xl font-serif text-[#1C1C1A]">
+                        {user?.role?.replace(/_/g, " ")} Dashboard
+                    </h1>
+                    <p className="text-[#1C1C1A]/40 text-lg font-light">
+                        This module is currently under development. Coming Soon.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-12">
             {/* Hero Section */}

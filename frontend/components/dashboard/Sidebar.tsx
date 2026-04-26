@@ -13,7 +13,8 @@ import {
     BarChart3, 
     Settings, 
     LogOut,
-    ShieldAlert
+    ShieldAlert,
+    QrCode
 } from "lucide-react";
 import { EvalisLogo } from "@/components/ui/EvalisLogo";
 import { useAuth } from "@/lib/auth-context";
@@ -28,6 +29,7 @@ const menuItems = [
     { name: "Exams", icon: ClipboardList, href: "/dashboard/exams" },
     { name: "Analytics", icon: BarChart3, href: "/dashboard/analytics" },
     { name: "Audit Logs", icon: ShieldAlert, href: "/dashboard/audit" },
+    { name: "QR Onboarding", icon: QrCode, href: "/dashboard/qrs" },
 ];
 
 export function Sidebar() {
@@ -42,7 +44,7 @@ export function Sidebar() {
             </div>
 
             {/* Navigation Section */}
-            <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar">
+            <nav className="flex-1 px-4 space-y-0.5 overflow-hidden">
                 {menuItems.map((item) => {
                     const isActive = pathname === item.href;
                     return (
@@ -50,7 +52,7 @@ export function Sidebar() {
                             <motion.div
                                 whileHover={{ x: 4 }}
                                 className={cn(
-                                    "px-4 py-3.5 rounded-2xl flex items-center gap-4 transition-all duration-300 group",
+                                    "px-4 py-2.5 rounded-2xl flex items-center gap-4 transition-all duration-300 group",
                                     isActive 
                                         ? "bg-[#1C1C1A] text-white shadow-lg shadow-[#1C1C1A]/10" 
                                         : "text-[#1C1C1A]/40 hover:text-[#1C1C1A] hover:bg-white/40"
@@ -80,7 +82,7 @@ export function Sidebar() {
             </nav>
 
             {/* User Profile & Settings */}
-            <div className="p-4 border-t border-[#1C1C1A]/5">
+            <div className="p-4 border-t border-[#1C1C1A]/5 mt-auto">
                 <Link href="/dashboard/settings">
                     <div className="px-4 py-3 rounded-2xl flex items-center gap-3 text-[#1C1C1A]/40 hover:text-[#1C1C1A] hover:bg-white/40 transition-all mb-2 cursor-pointer group">
                         <Settings size={20} strokeWidth={1.5} className="group-hover:rotate-45 transition-transform duration-500" />

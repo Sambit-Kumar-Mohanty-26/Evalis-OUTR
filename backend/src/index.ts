@@ -11,6 +11,7 @@ import adminRoutes from './routes/adminRoutes';
 import userRoutes from './routes/userRoutes';
 import batchRoutes from './routes/batchRoutes';
 import examRoutes from './routes/examRoutes';
+import profileRoutes from './routes/profileRoutes';
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
@@ -41,6 +42,7 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/batch', batchRoutes);
 app.use('/api/v1/exam', examRoutes);
+app.use('/api/v1/profile', profileRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'Evalis Core', timestamp: new Date().toISOString() });

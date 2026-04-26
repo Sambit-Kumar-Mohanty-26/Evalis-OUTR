@@ -5,7 +5,8 @@ import {
     onboard, 
     login, 
     refresh, 
-    logout 
+    logout,
+    qrRegister
 } from '../controllers/auth/authController';
 
 const router = Router();
@@ -16,5 +17,6 @@ router.post('/onboard', onboard);
 router.post('/login', login);
 router.post('/refresh', refresh);
 router.post('/logout', logout);
+router.post('/qr-register', qrRegister);
 
 export default router;

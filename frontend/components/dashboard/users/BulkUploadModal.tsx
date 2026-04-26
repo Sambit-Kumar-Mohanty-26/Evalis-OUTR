@@ -369,7 +369,7 @@ export default function BulkUploadModal({ activeTab, metadata, onClose, onSucces
                 {/* Footer */}
                 <div className="px-8 py-5 border-t border-[#1C1C1A]/5 flex items-center justify-between bg-white/20">
                     <p className="text-[10px] text-[#1C1C1A]/20">
-                        Default password for all: <span className="font-mono">Evalis@2024</span>
+                        Default password for all: <span className="font-mono">Evalis@2026</span>
                     </p>
                     <div className="flex items-center gap-3">
                         {step === "preview" && (
