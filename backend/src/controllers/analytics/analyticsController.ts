@@ -726,6 +726,213 @@ export const getStudentComparison = async (req: Request, res: Response) => {
     }
 };
 
+export const getStudentInternalAnalytics = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+
+        const marks = await prisma.studentMark.findMany({
+            where: { studentId: user.id },
+            include: {
+                subject: { select: { name: true, maxMarks: true } },
+                component: { select: { name: true, category: true, maxMarks: true } },
+                examInstance: { select: { name: true, semester: true } },
+            },
+            orderBy: { createdAt: 'asc' },
+        });
+
+        const subMarks = await prisma.studentSubMark.findMany({
+            where: { studentId: user.id },
+            include: { question: { select: { co: true, maxMarks: true } } },
+        });
+
+        // Aggregate per-subject component breakdown
+        const subjectMap: Record<string, { components: Record<string, number>; compMax: Record<string, number>; total: number; maxTotal: number }> = {};
+        marks.forEach(m => {
+            const key = m.subject.name;
+            if (!subjectMap[key]) subjectMap[key] = { components: {}, compMax: {}, total: 0, maxTotal: 0 };
+            subjectMap[key].components[m.component.name] = (subjectMap[key].components[m.component.name] || 0) + m.marksObtained;
+            subjectMap[key].compMax[m.component.name] = m.component.maxMarks;
+            subjectMap[key].total += m.marksObtained;
+            subjectMap[key].maxTotal += m.component.maxMarks;
+        });
+
+        const internalMarks = marks.filter(m => m.component.category === 'INTERNAL');
+        const totalInt = internalMarks.reduce((s, m) => s + m.marksObtained, 0);
+        const maxInt = internalMarks.reduce((s, m) => s + m.component.maxMarks, 0);
+        const internalScore = maxInt > 0 ? parseFloat(((totalInt / maxInt) * 100).toFixed(1)) : 0;
+
+        const attendanceMarks = marks.filter(m => m.component.name.toLowerCase().includes('attend'));
+        const attendancePct = attendanceMarks.length > 0
+            ? Math.round(attendanceMarks.reduce((s, m) => s + (m.marksObtained / m.component.maxMarks) * 100, 0) / attendanceMarks.length)
+            : 0;
+
+        // CO attainment from sub-marks
+        const coMap: Record<string, { total: number; max: number }> = {};
+        subMarks.forEach(sm => {
+            if (sm.question.co) {
+                if (!coMap[sm.question.co]) coMap[sm.question.co] = { total: 0, max: 0 };
+                coMap[sm.question.co].total += sm.marksObtained;
+                coMap[sm.question.co].max += Number(sm.question.maxMarks);
+            }
+        });
+        const coAttainment = Object.entries(coMap)
+            .map(([co, v]) => ({ co, attainment: v.max > 0 ? Math.round((v.total / v.max) * 100) : 0 }))
+            .sort((a, b) => a.co.localeCompare(b.co));
+
+        // Class average from batch
+        const student = await prisma.user.findUnique({ where: { id: user.id }, select: { batchId: true } });
+        let classAvg = 0;
+        if (student?.batchId) {
+            const batchMarks = await prisma.studentMark.findMany({
+                where: { student: { batchId: student.batchId, role: 'STUDENT' }, component: { category: 'INTERNAL' } },
+                include: { component: { select: { maxMarks: true } } },
+            });
+            const bTotal = batchMarks.reduce((s, m) => s + m.marksObtained, 0);
+            const bMax = batchMarks.reduce((s, m) => s + m.component.maxMarks, 0);
+            classAvg = bMax > 0 ? parseFloat(((bTotal / bMax) * 100).toFixed(1)) : 0;
+        }
+
+        const subjectInternalPerformance = Object.entries(subjectMap).map(([name, s]) => ({
+            subject: name,
+            internal: s.maxTotal > 0 ? Math.round((s.total / s.maxTotal) * 100) : 0,
+            max: 100,
+        }));
+
+        const componentBreakdown = Object.entries(subjectMap).map(([name, s]) => {
+            const short = name.split(' ').slice(0, 2).join(' ');
+            return {
+                subject: short,
+                quiz: Math.round(s.components['Quiz 1'] || s.components['Quiz'] || 0),
+                assignment: Math.round(s.components['Assignment'] || 0),
+                mid: Math.round(s.components['Mid Semester'] || s.components['Mid Sem'] || 0),
+                attendance: Math.round(s.components['Attendance'] || 0),
+            };
+        });
+
+        const status = internalScore >= 70 ? 'Good' : internalScore >= 50 ? 'Risk' : 'Critical';
+
+        res.json({
+            internalScore, classAvg,
+            rank: 0, totalStudents: 0,
+            attendance: attendancePct, status,
+            subjectInternalPerformance, componentBreakdown, coAttainment,
+            insights: [
+                `Your internal score is ${internalScore}% (class average: ${classAvg}%).`,
+                subjectInternalPerformance.length > 0
+                    ? `Strongest: ${[...subjectInternalPerformance].sort((a, b) => b.internal - a.internal)[0].subject}.`
+                    : '',
+                attendancePct > 0 ? `Attendance at ${attendancePct}%.` : '',
+            ].filter(Boolean),
+        });
+    } catch (error) {
+        console.error('Student internal analytics error:', error);
+        res.status(500).json({ error: 'Failed to load internal analytics' });
+    }
+};
+
+export const getStudentOverallDetail = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+
+        const marks = await prisma.studentMark.findMany({
+            where: { studentId: user.id },
+            include: {
+                subject: { select: { name: true } },
+                component: { select: { name: true, category: true, maxMarks: true } },
+            },
+        });
+
+        // Internal vs External per subject
+        const subBreak: Record<string, { iT: number; iM: number; eT: number; eM: number }> = {};
+        marks.forEach(m => {
+            const key = m.subject.name;
+            if (!subBreak[key]) subBreak[key] = { iT: 0, iM: 0, eT: 0, eM: 0 };
+            if (m.component.category === 'INTERNAL') {
+                subBreak[key].iT += m.marksObtained;
+                subBreak[key].iM += m.component.maxMarks;
+            } else {
+                subBreak[key].eT += m.marksObtained;
+                subBreak[key].eM += m.component.maxMarks;
+            }
+        });
+
+        const internalVsExternal = Object.entries(subBreak).map(([subject, v]) => ({
+            subject: subject.split(' ').slice(0, 2).join(' '),
+            internal: v.iM > 0 ? Math.round((v.iT / v.iM) * 50) : 0,
+            external: v.eM > 0 ? Math.round((v.eT / v.eM) * 50) : 0,
+        }));
+
+        // Peer comparison
+        const student = await prisma.user.findUnique({ where: { id: user.id }, select: { batchId: true } });
+        const semResults = await prisma.semesterResult.findMany({
+            where: { studentId: user.id }, orderBy: { semesterNumber: 'asc' },
+        });
+
+        let peerComparison: any[] = [];
+        if (student?.batchId) {
+            const peerSem = await prisma.semesterResult.findMany({
+                where: { student: { batchId: student.batchId, role: 'STUDENT' }, studentId: { not: user.id } },
+                select: { semesterNumber: true, sgpa: true },
+            });
+            const semPeer: Record<number, { max: number; sum: number; cnt: number }> = {};
+            peerSem.forEach(r => {
+                if (!semPeer[r.semesterNumber]) semPeer[r.semesterNumber] = { max: 0, sum: 0, cnt: 0 };
+                if (r.sgpa > semPeer[r.semesterNumber].max) semPeer[r.semesterNumber].max = r.sgpa;
+                semPeer[r.semesterNumber].sum += r.sgpa;
+                semPeer[r.semesterNumber].cnt++;
+            });
+            peerComparison = semResults.map(r => ({
+                semester: `Sem ${r.semesterNumber}`,
+                you: r.sgpa,
+                classAvg: semPeer[r.semesterNumber] ? parseFloat((semPeer[r.semesterNumber].sum / semPeer[r.semesterNumber].cnt).toFixed(2)) : 0,
+                topper: semPeer[r.semesterNumber]?.max ?? r.sgpa,
+            }));
+        }
+
+        // Grade distribution
+        const results = await prisma.studentResult.findMany({
+            where: { studentId: user.id }, select: { grade: true },
+        });
+        const gradeMap: Record<string, number> = {};
+        results.forEach(r => { if (r.grade) gradeMap[r.grade] = (gradeMap[r.grade] || 0) + 1; });
+        const gradeColors: Record<string, string> = { O: '#10B981', 'A+': '#3D8528', A: '#3B82F6', 'B+': '#8B5CF6', B: '#F59E0B', F: '#EF4444' };
+        const gradeDistribution = Object.entries(gradeMap).map(([grade, count]) => ({
+            grade, count, fill: gradeColors[grade] || '#3B82F6',
+        }));
+
+        // Risk index
+        const userData = await prisma.user.findUnique({ where: { id: user.id }, select: { cgpa: true } });
+        const activeBacklogs = await prisma.studentBacklog.count({ where: { studentId: user.id, status: 'ACTIVE' } });
+        let riskIndex = 0;
+        if ((userData?.cgpa || 0) < 4.5) riskIndex += 40;
+        else if ((userData?.cgpa || 0) < 6) riskIndex += 20;
+        if (activeBacklogs > 2) riskIndex += 40;
+        else if (activeBacklogs > 0) riskIndex += 20;
+
+        const sgpaTrendLatest = semResults.map(r => ({
+            semester: `Sem ${r.semesterNumber}`,
+            sgpa: r.sgpa,
+        }));
+
+        res.json({
+            internalVsExternal,
+            peerComparison,
+            sgpaTrend: sgpaTrendLatest,
+            gradeDistribution,
+            riskIndex,
+            riskLevel: riskIndex <= 20 ? 'Low' : riskIndex <= 50 ? 'Medium' : 'High',
+            insights: [
+                riskIndex <= 20 ? 'Risk level is Low — keep up the good work!' : `Risk level: ${riskIndex <= 50 ? 'Medium' : 'High'} — action recommended.`,
+                activeBacklogs > 0 ? `${activeBacklogs} active backlog(s) need attention.` : 'No active backlogs.',
+                peerComparison.length > 0 ? `Latest SGPA: ${peerComparison[peerComparison.length - 1]?.you} vs class average: ${peerComparison[peerComparison.length - 1]?.classAvg}.` : '',
+            ].filter(Boolean),
+        });
+    } catch (error) {
+        console.error('Student overall detail error:', error);
+        res.status(500).json({ error: 'Failed to load overall detail' });
+    }
+};
+
 export const getStudentBacklogAnalytics = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;

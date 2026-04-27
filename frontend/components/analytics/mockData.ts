@@ -251,6 +251,196 @@ export const teacherMockData = {
     ],
 };
 
+// ─── STUDENT INTERNAL ANALYTICS MOCK DATA ────────────────────────────────────
+
+export const studentInternalMockData = {
+    internalScore: 76.4,
+    classAvg: 62.1,
+    rank: 12,
+    totalStudents: 180,
+    attendance: 87.5,
+    status: "Good",
+
+    subjectInternalPerformance: [
+        { subject: "Data Structures", internal: 82, classAvg: 65, max: 100 },
+        { subject: "Maths III", internal: 68, classAvg: 58, max: 100 },
+        { subject: "Dig Electronics", internal: 74, classAvg: 62, max: 100 },
+        { subject: "English", internal: 91, classAvg: 75, max: 100 },
+        { subject: "Physics Lab", internal: 79, classAvg: 70, max: 100 },
+        { subject: "OS Concepts", internal: 71, classAvg: 61, max: 100 },
+    ],
+
+    componentBreakdown: [
+        { subject: "Data Str", quiz: 18, assignment: 9, mid: 46, attendance: 9 },
+        { subject: "Maths III", quiz: 12, assignment: 7, mid: 40, attendance: 9 },
+        { subject: "Dig Elec", quiz: 15, assignment: 8, mid: 42, attendance: 9 },
+        { subject: "English", quiz: 19, assignment: 9, mid: 54, attendance: 9 },
+        { subject: "Phy Lab", quiz: 16, assignment: 8, mid: 46, attendance: 9 },
+        { subject: "OS", quiz: 14, assignment: 7, mid: 41, attendance: 9 },
+    ],
+
+    coAttainment: [
+        { co: "CO1", attainment: 82, classAvg: 68 },
+        { co: "CO2", attainment: 68, classAvg: 60 },
+        { co: "CO3", attainment: 74, classAvg: 64 },
+        { co: "CO4", attainment: 90, classAvg: 72 },
+        { co: "CO5", attainment: 71, classAvg: 62 },
+    ],
+
+    coContribution: [
+        { co: "CO1", quiz: 28, assignment: 22, mid: 32 },
+        { co: "CO2", quiz: 22, assignment: 18, mid: 28 },
+        { co: "CO3", quiz: 25, assignment: 20, mid: 29 },
+        { co: "CO4", quiz: 32, assignment: 28, mid: 30 },
+        { co: "CO5", quiz: 24, assignment: 19, mid: 28 },
+    ],
+
+    classComparison: [
+        { category: "You", value: 76.4, fill: "#3D8528" },
+        { category: "Class Avg", value: 62.1, fill: "#3B82F6" },
+        { category: "Topper", value: 94.2, fill: "#8B5CF6" },
+    ],
+
+    subjectRanks: [
+        { subject: "Data Structures", rank: 8, total: 180, score: 82 },
+        { subject: "Mathematics III", rank: 22, total: 180, score: 68 },
+        { subject: "Digital Electronics", rank: 15, total: 180, score: 74 },
+        { subject: "English", rank: 4, total: 180, score: 91 },
+        { subject: "Physics Lab", rank: 11, total: 180, score: 79 },
+        { subject: "OS Concepts", rank: 18, total: 180, score: 71 },
+    ],
+
+    internalTrend: [
+        { event: "Quiz 1", score: 72, classAvg: 58 },
+        { event: "Quiz 2", score: 78, classAvg: 62 },
+        { event: "Mid Sem", score: 76, classAvg: 61 },
+    ],
+
+    attendanceData: [
+        { subject: "Data Structures", attendance: 92, marks: 82 },
+        { subject: "Mathematics III", attendance: 78, marks: 68 },
+        { subject: "Digital Electronics", attendance: 85, marks: 74 },
+        { subject: "English", attendance: 96, marks: 91 },
+        { subject: "Physics Lab", attendance: 88, marks: 79 },
+        { subject: "OS Concepts", attendance: 82, marks: 71 },
+    ],
+
+    performanceDistribution: [
+        { range: "0–40", count: 8, fill: "#EF4444" },
+        { range: "40–50", count: 15, fill: "#F59E0B" },
+        { range: "50–60", count: 32, fill: "#3B82F6" },
+        { range: "60–70", count: 48, fill: "#8B5CF6" },
+        { range: "70–80", count: 42, fill: "#3D8528" },
+        { range: "80–90", count: 25, fill: "#10B981" },
+        { range: "90+", count: 10, fill: "#06B6D4" },
+    ],
+
+    insights: [
+        "English is your strongest subject — 91% internal, 16% above class average",
+        "Mathematics III is below class average — CO2 attainment at 68% needs focus",
+        "Your attendance (87.5%) correlates positively with your performance",
+        "CO4 attainment is excellent at 90% — strongest across all outcomes",
+        "Internal trend shows improvement from Quiz 1 (72%) to Quiz 2 (78%)",
+    ],
+
+    predictedGrade: "A",
+    predictedSGPA: 8.6,
+};
+
+// ─── STUDENT OVERALL ANALYTICS MOCK DATA ─────────────────────────────────────
+
+export const studentOverallMockData = {
+    sgpa: 9.1,
+    cgpa: 8.5,
+    rank: 12,
+    totalStudents: 180,
+    passStatus: "PASS",
+    backlogs: { active: 0, cleared: 1 },
+
+    sgpaTrend: [
+        { semester: "Sem 1", sgpa: 8.2, classAvg: 7.1 },
+        { semester: "Sem 2", sgpa: 7.8, classAvg: 6.9 },
+        { semester: "Sem 3", sgpa: 8.5, classAvg: 7.2 },
+        { semester: "Sem 4", sgpa: 8.9, classAvg: 7.4 },
+        { semester: "Sem 5", sgpa: 9.1, classAvg: 7.6 },
+    ],
+
+    subjectPerformance: [
+        { subject: "Data Str", marks: 88, maxMarks: 100, grade: "O" },
+        { subject: "Maths III", marks: 72, maxMarks: 100, grade: "B" },
+        { subject: "Dig Elec", marks: 78, maxMarks: 100, grade: "A" },
+        { subject: "English", marks: 92, maxMarks: 100, grade: "O" },
+        { subject: "Phy Lab", marks: 85, maxMarks: 100, grade: "A" },
+        { subject: "OS Concepts", marks: 75, maxMarks: 100, grade: "A" },
+    ],
+
+    internalVsExternal: [
+        { subject: "Data Str", internal: 42, external: 46 },
+        { subject: "Maths III", internal: 36, external: 36 },
+        { subject: "Dig Elec", internal: 38, external: 40 },
+        { subject: "English", internal: 46, external: 46 },
+        { subject: "Phy Lab", internal: 42, external: 43 },
+        { subject: "OS", internal: 37, external: 38 },
+    ],
+
+    coFinalAttainment: [
+        { co: "CO1", student: 85, classAvg: 70 },
+        { co: "CO2", student: 72, classAvg: 65 },
+        { co: "CO3", student: 78, classAvg: 68 },
+        { co: "CO4", student: 91, classAvg: 72 },
+        { co: "CO5", student: 74, classAvg: 66 },
+    ],
+
+    gradeDistribution: [
+        { grade: "O (≥90%)", count: 2, fill: "#10B981" },
+        { grade: "A+ (85%)", count: 1, fill: "#3D8528" },
+        { grade: "A (75%)", count: 2, fill: "#3B82F6" },
+        { grade: "B+ (65%)", count: 1, fill: "#8B5CF6" },
+        { grade: "B (55%)", count: 0, fill: "#F59E0B" },
+        { grade: "F (<50%)", count: 0, fill: "#EF4444" },
+    ],
+
+    backlogHistory: [
+        { subject: "Mathematics II", status: "CLEARED", attempts: 2, clearedAt: "2024-08-15", semester: "Sem 2" },
+    ],
+
+    percentile: 93.3,
+
+    yearWiseCGPA: [
+        { year: "Year 1", cgpa: 8.0, avgCGPA: 7.0 },
+        { year: "Year 2", cgpa: 8.17, avgCGPA: 7.15 },
+        { year: "Year 3", cgpa: 8.5, avgCGPA: 7.35 },
+    ],
+
+    peerComparison: [
+        { semester: "Sem 1", you: 8.2, classAvg: 7.1, topper: 9.4 },
+        { semester: "Sem 2", you: 7.8, classAvg: 6.9, topper: 9.6 },
+        { semester: "Sem 3", you: 8.5, classAvg: 7.2, topper: 9.8 },
+        { semester: "Sem 4", you: 8.9, classAvg: 7.4, topper: 9.9 },
+        { semester: "Sem 5", you: 9.1, classAvg: 7.6, topper: 10.0 },
+    ],
+
+    performanceHeatmap: [
+        { subject: "Mathematics", sem1: 79, sem2: 72, sem3: 72, sem4: null, sem5: null },
+        { subject: "Data Structures", sem1: null, sem2: null, sem3: 88, sem4: null, sem5: null },
+        { subject: "Digital Elec", sem1: null, sem2: null, sem3: 78, sem4: null, sem5: null },
+        { subject: "English", sem1: 90, sem2: 92, sem3: null, sem4: null, sem5: null },
+        { subject: "Physics", sem1: 85, sem2: 82, sem3: null, sem4: null, sem5: null },
+        { subject: "OS Concepts", sem1: null, sem2: null, sem3: null, sem4: 75, sem5: null },
+    ],
+
+    riskIndex: 12,
+    riskLevel: "Low",
+
+    insights: [
+        "SGPA trend shows consistent improvement — up 0.9 over 5 semesters",
+        "CO4 has the highest final attainment at 91% — 19% above class average",
+        "Internal performance is stronger than external — keep the external prep up",
+        "You rank 12th out of 180 students — top 7% percentile of your class",
+        "1 backlog cleared successfully — currently zero active backlogs",
+    ],
+};
+
 // ─── STUDENT MOCK DATA ───────────────────────────────────────────────────────
 
 export const studentMockData = {

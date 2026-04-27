@@ -7,6 +7,7 @@ import {
     getAdvisorStudentHealth, getAdvisorSubjectImpact,
     getTeacherClassPerformance, getTeacherComponentAnalysis,
     getStudentPersonal, getStudentComparison, getStudentBacklogAnalytics,
+    getStudentInternalAnalytics, getStudentOverallDetail,
 } from '../controllers/analytics/analyticsController';
 
 const router = Router();
@@ -36,5 +37,7 @@ router.get('/teacher/components', authorize('TEACHER', 'ADMIN'), getTeacherCompo
 router.get('/student/personal', authorize('STUDENT'), getStudentPersonal);
 router.get('/student/comparison', authorize('STUDENT'), getStudentComparison);
 router.get('/student/backlogs', authorize('STUDENT'), getStudentBacklogAnalytics);
+router.get('/student/internal', authorize('STUDENT'), getStudentInternalAnalytics);
+router.get('/student/overall-detail', authorize('STUDENT'), getStudentOverallDetail);
 
 export default router;

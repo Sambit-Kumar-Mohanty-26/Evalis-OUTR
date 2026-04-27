@@ -20,6 +20,7 @@ const adminMenuItems = [
     { name: "Batches", icon: CalendarDays, href: "/dashboard/batches" },
     { name: "Exams", icon: ClipboardList, href: "/dashboard/exams" },
     { name: "Analytics", icon: BarChart3, href: "/dashboard/analytics" },
+    { name: "Student Analytics", icon: GraduationCap, href: "/dashboard/analytics/student" },
     { name: "Audit Logs", icon: ShieldAlert, href: "/dashboard/audit" },
     { name: "QR Onboarding", icon: QrCode, href: "/dashboard/qrs" },
 ];
@@ -30,6 +31,7 @@ const hosMenuItems = [
     { name: "Subject Analysis", icon: BookOpen, href: "/dashboard/hos/subjects" },
     { name: "Backlog Heatmap", icon: Flame, href: "/dashboard/hos/heatmap" },
     { name: "Analytics", icon: BarChart3, href: "/dashboard/hos/analytics" },
+    { name: "Student Analytics", icon: GraduationCap, href: "/dashboard/analytics/student" },
     { name: "Marks Entry", icon: PenLine, href: "/dashboard/hos/marks" },
 ];
 
@@ -40,6 +42,7 @@ const advisorMenuItems = [
     { name: "Subject Performance", icon: BarChart3, href: "/dashboard/advisor/subjects" },
     { name: "Marks Entry", icon: PenLine, href: "/dashboard/advisor/marks" },
     { name: "Analytics", icon: BarChart3, href: "/dashboard/advisor/analytics" },
+    { name: "Student Analytics", icon: GraduationCap, href: "/dashboard/analytics/student" },
 ];
 
 const teacherMenuItems = [
@@ -47,6 +50,7 @@ const teacherMenuItems = [
     { name: "Marks Entry", icon: PenLine, href: "/dashboard/teacher/marks" },
     { name: "Performance", icon: BarChart3, href: "/dashboard/teacher/performance" },
     { name: "Analytics", icon: BarChart3, href: "/dashboard/teacher/analytics" },
+    { name: "Student Analytics", icon: GraduationCap, href: "/dashboard/analytics/student" },
 ];
 
 const studentMenuItems = [
@@ -85,7 +89,10 @@ export function Sidebar() {
             <nav className="flex-1 px-4 space-y-0.5 overflow-hidden">
                 {getMenuItems(user?.role).map((item) => {
                     const basePaths = ['/dashboard', '/dashboard/hos', '/dashboard/advisor', '/dashboard/teacher', '/dashboard/student'];
-                    const isActive = pathname === item.href || (!basePaths.includes(item.href) && pathname.startsWith(item.href));
+                    let isActive = pathname === item.href || (!basePaths.includes(item.href) && pathname.startsWith(item.href));
+                    if (item.href === '/dashboard/analytics' && pathname.startsWith('/dashboard/analytics/student')) {
+                        isActive = false;
+                    }
                     return (
                         <Link key={item.name} href={item.href}>
                             <motion.div

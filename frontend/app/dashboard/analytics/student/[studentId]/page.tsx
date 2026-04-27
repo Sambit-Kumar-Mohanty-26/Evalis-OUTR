@@ -886,7 +886,25 @@ function OverallView({ data }: { data: typeof studentOverallMockData }) {
 }
 
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
-export default function StudentAnalyticsPage() {
+import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { use } from "react";
+
+export default function StudentAnalyticsPage({ params }: { params: Promise<{ studentId: string }> }) {
+    const { studentId } = use(params);
+    const router = useRouter();
+    const [studentName, setStudentName] = useState<string>("Student");
+    const [studentDetails, setStudentDetails] = useState<string>("");
+
+    useEffect(() => {
+        api.get(`/api/v1/user/${studentId}`).then(data => {
+            setStudentName(data.fullName);
+            if (data.rollNumber && data.batch?.name) {
+                setStudentDetails(`${data.rollNumber} • ${data.batch.name} • ${data.batch.branch?.name}`);
+            }
+        }).catch(console.error);
+    }, [studentId]);
+
     const [activeTab, setActiveTab] = useState<"internal" | "overall">("internal");
     const [dataSource, setDataSource] = useState<"mock" | "live">("mock");
     const [liveInternal, setLiveInternal] = useState<any>(null);
@@ -900,16 +918,16 @@ export default function StudentAnalyticsPage() {
         setLoading(true);
 
         if (activeTab === "internal") {
-            api.get("/api/v1/analytics/student/internal")
+            api.get(`/api/v1/analytics/student/internal?studentId=${studentId}`)
                 .then(d => setLiveInternal(d))
                 .catch(() => setLiveError(true))
                 .finally(() => setLoading(false));
         } else {
             Promise.all([
-                api.get("/api/v1/analytics/student/personal"),
-                api.get("/api/v1/analytics/student/comparison"),
-                api.get("/api/v1/analytics/student/backlogs"),
-                api.get("/api/v1/analytics/student/overall-detail"),
+                api.get(`/api/v1/analytics/student/personal?studentId=${studentId}`),
+                api.get(`/api/v1/analytics/student/comparison?studentId=${studentId}`),
+                api.get(`/api/v1/analytics/student/backlogs?studentId=${studentId}`),
+                api.get(`/api/v1/analytics/student/overall-detail?studentId=${studentId}`),
             ])
                 .then(([personal, comparison, backlogsData, detail]) => {
                     setLiveOverall({
@@ -948,12 +966,18 @@ export default function StudentAnalyticsPage() {
             {/* ── Header ───────────────────────────────────────────────────── */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div>
+                    <button 
+                        onClick={() => router.push('/dashboard/analytics/student')}
+                        className="flex items-center gap-2 text-[#1C1C1A]/40 hover:text-[#1C1C1A] text-xs font-bold mb-6 transition-colors"
+                    >
+                        <ArrowLeft size={14} /> Back to Students
+                    </button>
                     <div className="flex items-center gap-2 text-brand-green text-[10px] font-black tracking-[0.2em] uppercase mb-2">
-                        <GraduationCap size={13} /> Student Analytics
+                        <GraduationCap size={13} /> {studentName}'s Analytics
                     </div>
-                    <h1 className="text-4xl font-serif text-[#1C1C1A]">My Academic Intelligence</h1>
-                    <p className="text-[#1C1C1A]/40 text-sm mt-1">
-                        Deep-dive into your internal performance, CO attainment, and final results.
+                    <h1 className="text-4xl font-serif text-[#1C1C1A]">{studentName}</h1>
+                    <p className="text-[#1C1C1A]/40 text-sm mt-1 font-mono">
+                        {studentDetails || "Loading student details..."}
                     </p>
                 </div>
 
