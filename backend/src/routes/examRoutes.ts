@@ -43,9 +43,9 @@ router.post('/schemas/:id/map', authorize('ADMIN'), mapSchemaToSubjects);
 
 // ─── EXAM INSTANCES ──────────────────────────────────────────────────────────
 router.get('/instances', getExamInstances);
-router.post('/instances', authorize('ADMIN'), createExamInstance);
-router.put('/instances/:id/status', authorize('ADMIN'), updateExamStatus);
-router.post('/instances/:id/publish', authorize('ADMIN'), publishResults);
+router.post('/instances', authorize('ADMIN', 'HEAD_OF_SCHOOL'), createExamInstance);
+router.put('/instances/:id/status', authorize('ADMIN', 'HEAD_OF_SCHOOL'), updateExamStatus);
+router.post('/instances/:id/publish', authorize('ADMIN', 'HEAD_OF_SCHOOL'), publishResults);
 
 // ─── MARKS ENTRY (Teacher + Advisor + HOS + Admin) ──────────────────────────
 router.post('/marks', authorize('TEACHER', 'ADVISOR', 'HEAD_OF_SCHOOL', 'ADMIN'), enterMarks);
@@ -53,9 +53,10 @@ router.get('/marks/:subjectId', getMarks);
 router.post('/marks/upload', upload.single('file'), authorize('TEACHER', 'ADVISOR', 'HEAD_OF_SCHOOL', 'ADMIN'), uploadMarksCSV);
 
 // ─── RESULTS ─────────────────────────────────────────────────────────────────
-router.post('/results/calculate', protect, authorize('ADMIN'), calculateResults);
+router.post('/results/calculate', protect, authorize('ADMIN', 'HEAD_OF_SCHOOL'), calculateResults);
 router.get('/instances/:id/results', protect, getExamInstanceResults);
 router.get('/student/:studentId', protect, getStudentResults);
+
 
 // ─── BACKLOGS ────────────────────────────────────────────────────────────────
 router.get('/backlogs', getBacklogs);

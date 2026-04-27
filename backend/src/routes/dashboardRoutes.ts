@@ -4,8 +4,11 @@ import { protect, authorize } from '../middleware/authMiddleware';
 // HOS
 import {
     getHosOverview, getHosBranchPerformance,
-    getHosSubjectAnalysis, getHosAlerts, getHosBacklogHeatmap
+    getHosSubjectAnalysis, getHosAlerts, getHosBacklogHeatmap,
+    getHosBranchStudents, getHosStudentDetails,
+    getSchoolTeachers, assignBranchAdvisor, revokeBranchAdvisor
 } from '../controllers/dashboard/hosDashboardController';
+
 
 // Advisor
 import {
@@ -35,6 +38,12 @@ router.get('/hos/branches', authorize('HEAD_OF_SCHOOL', 'ADMIN'), getHosBranchPe
 router.get('/hos/subjects', authorize('HEAD_OF_SCHOOL', 'ADMIN'), getHosSubjectAnalysis);
 router.get('/hos/alerts', authorize('HEAD_OF_SCHOOL', 'ADMIN'), getHosAlerts);
 router.get('/hos/backlog-heatmap', authorize('HEAD_OF_SCHOOL', 'ADMIN'), getHosBacklogHeatmap);
+router.get('/hos/branches/:branchId/students', authorize('HEAD_OF_SCHOOL', 'ADMIN'), getHosBranchStudents);
+router.get('/hos/students/:studentId', authorize('HEAD_OF_SCHOOL', 'ADMIN'), getHosStudentDetails);
+router.get('/hos/teachers', authorize('HEAD_OF_SCHOOL', 'ADMIN'), getSchoolTeachers);
+router.post('/hos/assign-advisor', authorize('HEAD_OF_SCHOOL', 'ADMIN'), assignBranchAdvisor);
+router.post('/hos/branches/:branchId/revoke-advisor', authorize('HEAD_OF_SCHOOL', 'ADMIN'), revokeBranchAdvisor);
+
 
 // ─── ADVISOR ─────────────────────────────────────────────────────────────────
 router.get('/advisor/overview', authorize('ADVISOR', 'ADMIN'), getAdvisorOverview);

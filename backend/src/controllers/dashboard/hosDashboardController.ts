@@ -23,9 +23,13 @@ export const getHosOverview = async (req: AuthRequest, res: Response): Promise<v
             include: { managedNodes: { select: { id: true, name: true, type: true } } }
         });
 
-        const schoolNode = hosUser?.managedNodes?.find(n => n.type === 'SCHOOL' || n.type === 'CUSTOM') || hosUser?.managedNodes?.[0];
+        const schoolNode = hosUser?.managedNodes?.find(n => n.type.toUpperCase() === 'SCHOOL' || n.type.toUpperCase() === 'CUSTOM') || hosUser?.managedNodes?.[0];
         if (!schoolNode) {
-            res.json({ totalStudents: 0, totalBranches: 0, avgCGPA: 0, passPercent: 0, backlogPercent: 0, schoolName: 'No School Assigned' });
+            res.json({ 
+                totalStudents: 0, totalBranches: 0, avgCGPA: 0, passPercent: 0, backlogPercent: 0, 
+                schoolName: 'No School Assigned',
+                hosName: hosUser?.fullName 
+            });
             return;
         }
 
@@ -39,8 +43,8 @@ export const getHosOverview = async (req: AuthRequest, res: Response): Promise<v
             return;
         }
 
-        cache.set(cacheKey, stats);
-        res.json(stats);
+        cache.set(cacheKey, { ...stats, hosName: hosUser?.fullName });
+        res.json({ ...stats, hosName: hosUser?.fullName });
     } catch (error) {
         console.error('HOS Overview Error:', error);
         res.status(500).json({ error: 'Failed to load school overview.' });
@@ -55,9 +59,9 @@ export const getHosBranchPerformance = async (req: AuthRequest, res: Response): 
 
         const hosUser = await db.user.findUnique({
             where: { id: userId },
-            include: { managedNodes: { select: { id: true } } }
+            include: { managedNodes: { select: { id: true, type: true } } }
         });
-        const schoolNode = hosUser?.managedNodes?.[0];
+        const schoolNode = hosUser?.managedNodes?.find(n => n.type.toUpperCase() === 'SCHOOL') || hosUser?.managedNodes?.[0];
         if (!schoolNode) { res.json({ branches: [] }); return; }
 
         const cacheKey = cache.key(tenantId, 'hos', userId, 'branches');
@@ -66,7 +70,13 @@ export const getHosBranchPerformance = async (req: AuthRequest, res: Response): 
 
         const school = await db.academicSchool.findFirst({
             where: { orgNodeId: schoolNode.id, isDeleted: false },
-            include: { branches: { where: { isDeleted: false } } }
+            include: { 
+                branches: { 
+                    where: { isDeleted: false },
+                    include: { batches: { where: { isDeleted: false } } }
+                } 
+            },
+            orderBy: { createdAt: 'desc' } // Get most recent one if duplicates exist
         });
         if (!school) { res.json({ branches: [] }); return; }
 
@@ -78,13 +88,22 @@ export const getHosBranchPerformance = async (req: AuthRequest, res: Response): 
             const students = await db.user.count({
                 where: { batch: { branchId: branch.id }, role: 'STUDENT', isDeleted: false }
             });
+
+            // Fetch Advisor
+            const advisor = branch.advisorId ? await db.user.findUnique({
+                where: { id: branch.advisorId },
+                select: { id: true, fullName: true, email: true }
+            }) : null;
+
             return {
                 branchId: branch.id,
                 branchName: branch.name,
                 totalStudents: students,
+                batches: branch.batches.map(b => b.name).join(', '),
                 passPercent: getPassPercent(results),
                 failPercent: getFailPercent(results),
-                totalResults: results.length
+                totalResults: results.length,
+                advisor: advisor || null
             };
         }));
 
@@ -96,6 +115,225 @@ export const getHosBranchPerformance = async (req: AuthRequest, res: Response): 
         res.status(500).json({ error: 'Failed to load branch performance.' });
     }
 };
+
+// ─── ASSIGN BRANCH ADVISOR ──────────────────────────────────────────────────
+export const assignBranchAdvisor = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const { branchId, teacherId } = req.body;
+        const tenantId = req.user!.tenantId;
+
+        if (!branchId || !teacherId) {
+            res.status(400).json({ error: 'Branch ID and Teacher ID are required.' });
+            return;
+        }
+
+        // Verify the user is a teacher or advisor
+        const teacher = await db.user.findUnique({
+            where: { 
+                id: teacherId, 
+                tenantId, 
+                role: { in: ['TEACHER', 'ADVISOR'] }, 
+                isDeleted: false 
+            }
+        });
+
+        if (!teacher) {
+            res.status(404).json({ error: 'Teacher not found or invalid role.' });
+            return;
+        }
+
+        // 1. Identify the current advisor to handle demotion if necessary
+        const currentBranch = await db.branch.findUnique({
+            where: { id: branchId },
+            select: { advisorId: true, orgNodeId: true }
+        });
+
+        const oldAdvisorId = currentBranch?.advisorId;
+
+        // 2. Perform role transitions and branch update in a transaction
+        const result = await db.$transaction(async (tx) => {
+            // Demote old advisor if they won't have any other branches
+            if (oldAdvisorId && oldAdvisorId !== teacherId) {
+                const otherBranchCount = await tx.branch.count({
+                    where: { advisorId: oldAdvisorId, id: { not: branchId }, isDeleted: false }
+                });
+                
+                if (otherBranchCount === 0) {
+                    await tx.user.update({
+                        where: { id: oldAdvisorId },
+                        data: { role: 'TEACHER' }
+                    });
+                }
+            }
+
+            // Promote new advisor and update their managed nodes
+            await tx.user.update({
+                where: { id: teacherId },
+                data: { 
+                    role: 'ADVISOR',
+                    managedNodes: currentBranch?.orgNodeId ? {
+                        connect: { id: currentBranch.orgNodeId }
+                    } : undefined
+                }
+            });
+
+            // Update the branch assignment
+            return await tx.branch.update({
+                where: { id: branchId },
+                data: { advisorId: teacherId },
+                include: { advisor: { select: { id: true, fullName: true, role: true } } }
+            });
+        });
+
+        // 3. Audit Log
+        await db.auditLog.create({
+            data: {
+                userId: req.user!.userId,
+                action: 'UPDATE',
+                entity: 'Branch',
+                entityId: branchId,
+                metadata: { 
+                    action: 'ASSIGN_ADVISOR', 
+                    newAdvisorId: teacherId, 
+                    oldAdvisorId: oldAdvisorId,
+                    newRole: 'ADVISOR'
+                } as any
+            }
+        });
+
+        // 4. Clear cache
+        cache.invalidate(cache.key(tenantId, 'hos', req.user!.userId, 'branches'));
+
+        res.json({ 
+            message: 'Advisor assigned and roles updated successfully.', 
+            branch: result 
+        });
+    } catch (error) {
+        console.error('Assign Advisor Error:', error);
+        res.status(500).json({ error: 'Failed to assign advisor.' });
+    }
+};
+
+export const revokeBranchAdvisor = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const branchId = req.params.branchId as string;
+        const tenantId = req.user!.tenantId;
+
+        if (!branchId) {
+            res.status(400).json({ error: 'Branch ID is required.' });
+            return;
+        }
+
+        const currentBranch = await db.branch.findUnique({
+            where: { id: branchId },
+            select: { advisorId: true, orgNodeId: true }
+        });
+
+        const oldAdvisorId = currentBranch?.advisorId;
+
+        if (!oldAdvisorId) {
+            res.status(400).json({ error: 'No advisor assigned to this branch.' });
+            return;
+        }
+
+        const result = await db.$transaction(async (tx) => {
+            // Check if the advisor manages other branches
+            const otherBranchCount = await tx.branch.count({
+                where: { advisorId: oldAdvisorId, id: { not: branchId }, isDeleted: false }
+            });
+            
+            // Demote to TEACHER if no other branches, and remove the specific managed node connection
+            await tx.user.update({
+                where: { id: oldAdvisorId },
+                data: { 
+                    role: otherBranchCount === 0 ? 'TEACHER' : undefined,
+                    managedNodes: currentBranch?.orgNodeId ? {
+                        disconnect: { id: currentBranch.orgNodeId }
+                    } : undefined
+                }
+            });
+
+            // Remove advisor from branch
+            return await tx.branch.update({
+                where: { id: branchId },
+                data: { advisorId: null }
+            });
+        });
+
+        // Audit Log
+        await db.auditLog.create({
+            data: {
+                userId: req.user!.userId,
+                action: 'UPDATE',
+                entity: 'Branch',
+                entityId: branchId,
+                metadata: { 
+                    action: 'REVOKE_ADVISOR', 
+                    oldAdvisorId: oldAdvisorId
+                } as any
+            }
+        });
+
+        // Clear cache
+        cache.invalidate(cache.key(tenantId, 'hos', req.user!.userId, 'branches'));
+
+        res.json({ 
+            message: 'Advisor access revoked successfully.', 
+            branch: result 
+        });
+    } catch (error) {
+        console.error('Revoke Advisor Error:', error);
+        res.status(500).json({ error: 'Failed to revoke advisor.' });
+    }
+};
+
+
+// ─── GET ELIGIBLE TEACHERS FOR SCHOOL ─────────────────────────────────────────
+export const getSchoolTeachers = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user!.userId;
+        const tenantId = req.user!.tenantId;
+
+        const hosUser = await db.user.findUnique({
+            where: { id: userId },
+            include: { managedNodes: { select: { id: true, type: true } } }
+        });
+
+        const schoolNode = hosUser?.managedNodes?.find(n => n.type.toUpperCase() === 'SCHOOL') || hosUser?.managedNodes?.[0];
+        if (!schoolNode) { res.json({ teachers: [] }); return; }
+
+        // Find all node IDs in this school's hierarchy (School itself + its branches)
+        const schoolWithChildren = await db.organizationNode.findUnique({
+            where: { id: schoolNode.id },
+            include: { children: { select: { id: true } } }
+        });
+
+        const nodeIds = [schoolNode.id, ...(schoolWithChildren?.children.map(c => c.id) || [])];
+
+        // Find teachers/advisors who:
+        // 1. Manage nodes in this school's hierarchy
+        // 2. OR have NO managed nodes yet (newly signed up and unassigned)
+        const teachers = await db.user.findMany({
+            where: {
+                role: { in: ['TEACHER', 'ADVISOR'] },
+                tenantId,
+                isDeleted: false,
+                OR: [
+                    { managedNodes: { some: { id: { in: nodeIds } } } },
+                    { managedNodes: { none: {} } }
+                ]
+            },
+            select: { id: true, fullName: true, email: true }
+        });
+
+        res.json({ teachers });
+    } catch (error) {
+        console.error('Get School Teachers Error:', error);
+        res.status(500).json({ error: 'Failed to load school teachers.' });
+    }
+};
+
+
 
 // ─── SUBJECT DIFFICULTY ANALYSIS ─────────────────────────────────────────────
 export const getHosSubjectAnalysis = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -268,3 +506,96 @@ export const getHosBacklogHeatmap = async (req: AuthRequest, res: Response): Pro
         res.status(500).json({ error: 'Failed to load backlog heatmap.' });
     }
 };
+
+// ─── BRANCH STUDENTS ──────────────────────────────────────────────────────────
+export const getHosBranchStudents = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const branchId = req.params.branchId as string;
+        const tenantId = req.user!.tenantId;
+
+        if (!branchId) {
+            res.status(400).json({ error: 'Branch ID is required' });
+            return;
+        }
+
+        const students = await db.user.findMany({
+            where: { 
+                batch: { branchId }, 
+                role: 'STUDENT', 
+                tenantId,
+                isDeleted: false 
+            },
+            select: {
+                id: true,
+                fullName: true,
+                rollNumber: true,
+                cgpa: true,
+                currentSemester: true,
+                metadata: true,
+                batch: { select: { name: true } },
+                _count: {
+                    select: { backlogs: { where: { status: 'ACTIVE' } } }
+                }
+            },
+            orderBy: { fullName: 'asc' }
+        });
+
+        // Map and include SGPA if available in metadata
+        const studentList = students.map((s: any) => ({
+            id: s.id,
+            fullName: s.fullName,
+            rollNumber: s.rollNumber,
+            cgpa: s.cgpa || 0,
+            sgpa: (s.metadata as any)?.lastSemesterSGPA || 0,
+            semester: s.currentSemester || 1,
+            batchName: s.batch?.name || 'N/A',
+            backlogs: s._count?.backlogs || 0
+        }));
+
+
+        res.json({ students: studentList });
+    } catch (error) {
+        console.error('HOS Branch Students Error:', error);
+        res.status(500).json({ error: 'Failed to load branch students.' });
+    }
+};
+
+// ─── STUDENT DETAILS (HOS View) ──────────────────────────────────────────────
+export const getHosStudentDetails = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const studentId = req.params.studentId as string;
+        const tenantId = req.user!.tenantId;
+
+        const student = await db.user.findUnique({
+            where: { id: studentId, tenantId, role: 'STUDENT' } as any,
+            include: {
+                batch: {
+                    include: {
+                        branch: { include: { school: true } }
+                    }
+                },
+                results: {
+                    where: { isPublished: true },
+                    include: { subject: true },
+                    orderBy: { createdAt: 'desc' }
+                },
+                backlogs: {
+                    where: { status: 'ACTIVE' },
+                    include: { subject: true }
+                }
+            }
+        });
+
+        if (!student) {
+            res.status(404).json({ error: 'Student not found.' });
+            return;
+        }
+
+        res.json(student);
+    } catch (error) {
+        console.error('HOS Student Details Error:', error);
+        res.status(500).json({ error: 'Failed to load student details.' });
+    }
+};
+
+

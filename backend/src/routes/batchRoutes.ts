@@ -17,23 +17,22 @@ import { Response } from 'express';
 const router = Router();
 
 router.use(protect);
-router.use(authorize('ADMIN'));
-
 // Core CRUD
-router.get('/', getBatches);
-router.get('/:id', getBatchById);
-router.post('/', createBatch);
-router.put('/:id', updateBatch);
+router.get('/', authorize('ADMIN', 'HEAD_OF_SCHOOL', 'ADVISOR', 'TEACHER'), getBatches);
+router.get('/:id', authorize('ADMIN', 'HEAD_OF_SCHOOL', 'ADVISOR', 'TEACHER'), getBatchById);
+router.post('/', authorize('ADMIN', 'HEAD_OF_SCHOOL'), createBatch);
+router.put('/:id', authorize('ADMIN', 'HEAD_OF_SCHOOL'), updateBatch);
 
 // Timeline
-router.put('/:id/timeline', updateTimeline);
-router.post('/cohort-timeline', updateCohortTimeline);
+router.put('/:id/timeline', authorize('ADMIN', 'HEAD_OF_SCHOOL'), updateTimeline);
+router.post('/cohort-timeline', authorize('ADMIN', 'HEAD_OF_SCHOOL'), updateCohortTimeline);
 
 // Lock / Unlock
-router.post('/:id/lock', toggleBatchLock);
+router.post('/:id/lock', authorize('ADMIN', 'HEAD_OF_SCHOOL'), toggleBatchLock);
 
 // Promotion
-router.post('/:id/promote', async (req: AuthRequest, res: Response) => {
+router.post('/:id/promote', authorize('ADMIN', 'HEAD_OF_SCHOOL'), async (req: AuthRequest, res: Response) => {
+
     try {
         const id = req.params.id as string;
         const adminUserId = req.user!.userId;

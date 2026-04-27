@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { db } from '../../config/db';
 import { AuthRequest } from '../../middleware/authMiddleware';
+import { BatchSyncService } from '../../services/batchSyncService';
+
 
 export const createVersion = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -115,7 +117,15 @@ export const createVersion = async (req: AuthRequest, res: Response): Promise<vo
             }
         });
 
+        // Auto-sync Batches
+        try {
+            await BatchSyncService.syncAllBatches(tenantId);
+        } catch (e) {
+            console.warn('Post-create Batch sync failed:', e);
+        }
+
         res.status(201).json(version);
+
     } catch (error: any) {
         console.error('CREATE VERSION ERROR:', error);
         res.status(500).json({ error: 'Failed to initialize academic blueprint: ' + (error.message || 'Unknown error') });
@@ -357,7 +367,15 @@ export const syncVersion = async (req: AuthRequest, res: Response): Promise<void
             });
         }
 
+        // Auto-sync Batches
+        try {
+            await BatchSyncService.syncAllBatches(tenantId);
+        } catch (e) {
+            console.warn('Post-sync Batch sync failed:', e);
+        }
+
         res.status(200).json({ message: 'Synchronization complete.', ...syncResult });
+
     } catch (error: any) {
         console.error('Core Transaction Failure:', error);
         res.status(500).json({ error: 'Sync Protocol Failure: ' + (error.message || 'Unknown matrix error') });

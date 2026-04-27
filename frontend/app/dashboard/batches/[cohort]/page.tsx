@@ -224,7 +224,7 @@ export default function BatchDetailPage() {
             setShowTimelineModal(false);
             fetchData();
         } catch (error: any) {
-            const msg = error.response?.data?.error || "Failed to update cohort timeline";
+            const msg = error.message || "Failed to update cohort timeline";
             toast.error(msg);
         } finally {
             setSaving(false);

@@ -52,12 +52,18 @@ interface ExamInstance {
     _count: { marks: number; results: number };
 }
 
-const normalizeSchoolName = (name: string) => {
-    return name.trim().toLowerCase()
-        .replace(/\bschool\b/g, '')
-        .replace(/\bof\b/g, '')
-        .replace(/sciences?$/, 'science')
-        .replace(/[^a-z0-9]/g, '');
+// Filter types for Marks Entry
+interface BranchOption {
+    id: string;
+    name: string;
+    schoolId: string;
+    programName?: string;
+}
+
+const getCohortName = (name: string) => {
+    const match = name.match(/(\d{4})[-–—](\d{4})/);
+    if (match) return `${match[1]}-${match[2]}`;
+    return name;
 };
 
 export default function ExamsPage() {
@@ -105,6 +111,7 @@ export default function ExamsPage() {
     const [isLoadingStudents, setIsLoadingStudents] = useState(false);
     const [schools, setSchools] = useState<any[]>([]);
     const [allBranches, setAllBranches] = useState<any[]>([]);
+    const [marksBatchName, setMarksBatchName] = useState("");
     const [marksSchoolId, setMarksSchoolId] = useState("");
     const [marksBranchId, setMarksBranchId] = useState("");
 
@@ -114,54 +121,55 @@ export default function ExamsPage() {
     const [selectedResultInstanceId, setSelectedResultInstanceId] = useState("");
     const [isLoadingResults, setIsLoadingResults] = useState(false);
 
+    const uniqueBatchNames = useMemo(() => {
+        const names = batches
+            .map(b => getCohortName(b.name))
+            .filter(name => name !== "New Entity" && !name.includes("New Entity"));
+        return Array.from(new Set(names)).sort();
+    }, [batches]);
+
+    const filteredSchoolOptions = useMemo(() => {
+        if (!marksBatchName) return schools;
+        // Find schools that have at least one branch in this batch cohort
+        const batchSpecificBranches = batches.filter(b => getCohortName(b.name) === marksBatchName);
+        const schoolIds = new Set(batchSpecificBranches.map(b => b.branch?.schoolId || b.branch?.school?.id));
+        return schools.filter(s => schoolIds.has(s.id));
+    }, [marksBatchName, schools, batches]);
+
     const filteredBranchOptions = useMemo(() => {
-        if (!marksBatchId || !marksSchoolId) return [];
+        if (!marksSchoolId) return [];
+        let options = allBranches.filter(br => br.schoolId === marksSchoolId && br.name !== "New Entity");
         
-        const selectedSchool = schools.find(s => s.id === marksSchoolId || s.originalIds?.includes(marksSchoolId));
-        if (!selectedSchool) return [];
-        
-        const currentBatch = batches.find(b => b.id === marksBatchId);
-        if (!currentBatch) return [];
-        
-        const targetSchoolKey = normalizeSchoolName(selectedSchool.name);
-        
-        // Find the program name of the currently selected batch (e.g., "B.Tech" or "M.Tech")
-        const batchProgramName = currentBatch.branch?.school?.program?.name?.trim().toLowerCase();
-
-        // 1. Get all branches belonging to this school from blueprint
-        let blueprintBranches = allBranches.filter(br => br.schoolName === targetSchoolKey);
-
-        // 2. Filter by program name to ensure we don't mix B.Tech and M.Tech branches
-        if (batchProgramName) {
-            blueprintBranches = blueprintBranches.filter(br => {
-                const brProgramName = br.programName?.trim().toLowerCase();
-                return brProgramName === batchProgramName;
-            });
+        if (marksBatchName) {
+            // Further filter by branches that actually have a batch with this cohort name
+            const batchBranchIds = new Set(batches.filter(b => getCohortName(b.name) === marksBatchName).map(b => b.branchId || b.branch?.id));
+            options = options.filter(br => batchBranchIds.has(br.id));
         }
+        return options;
+    }, [marksSchoolId, marksBatchName, allBranches, batches]);
 
-        const normalizeBranchName = (name: string) => {
-            return name.toLowerCase()
-                .replace(/\bengineering\b/g, '')
-                .replace(/\bb\.tech\b/g, '')
-                .replace(/\bm\.tech\b/g, '')
-                .replace(/[^a-z0-9]/g, '')
-                .trim();
-        };
-
-        // 3. Deduplicate by normalized name
-        const branchMap = new Map();
-        blueprintBranches.forEach(br => {
-            const nameKey = normalizeBranchName(br.name);
-            if (!branchMap.has(nameKey)) {
-                branchMap.set(nameKey, {
-                    id: br.id,
-                    name: br.name
-                });
-            }
-        });
-
-        return Array.from(branchMap.values());
-    }, [marksBatchId, marksSchoolId, schools, batches, allBranches]);
+    const maxSemesters = useMemo(() => {
+        let matchingBranches = allBranches;
+        
+        if (marksBatchName) {
+            const batchBranchIds = new Set(batches.filter(b => getCohortName(b.name) === marksBatchName).map(b => b.branchId || b.branch?.id));
+            matchingBranches = matchingBranches.filter(br => batchBranchIds.has(br.id));
+        }
+        
+        if (marksSchoolId) {
+            matchingBranches = matchingBranches.filter(br => br.schoolId === marksSchoolId);
+        }
+        
+        if (marksBranchId) {
+            matchingBranches = matchingBranches.filter(br => br.id === marksBranchId);
+        }
+        
+        if (matchingBranches.length === 0) return 8;
+        
+        const counts = matchingBranches.map(br => br.semesters?.length || 0);
+        const max = Math.max(...counts);
+        return max > 0 ? max : 8;
+    }, [marksBatchName, marksSchoolId, marksBranchId, allBranches, batches]);
 
 
     const [isCreatingSchema, setIsCreatingSchema] = useState(false);
@@ -202,38 +210,27 @@ export default function ExamsPage() {
         try {
             const data = await api.get("/api/v1/academic/structure?versionId=current");
             if (data && data.programs) {
-                const schoolMap: Record<string, any> = {};
-                const branchMap = new Map<string, any>();
+                const schoolMap = new Map<string, any>();
+                const branchList: any[] = [];
                 const subjs: any[] = [];
                 
                 data.programs.forEach((p: any) => {
                     p.schools?.forEach((sch: any) => {
-                        const originalName = sch.name.trim();
-                        const normalizedKey = normalizeSchoolName(originalName);
-
-                        if (!schoolMap[normalizedKey]) {
-                            schoolMap[normalizedKey] = { 
+                        if (!schoolMap.has(sch.id)) {
+                            schoolMap.set(sch.id, { 
                                 id: sch.id, 
-                                name: originalName, 
-                                key: normalizedKey,
-                                originalIds: [sch.id] 
-                            };
-                        } else {
-                            schoolMap[normalizedKey].originalIds.push(sch.id);
+                                name: sch.name.trim()
+                            });
                         }
 
                         sch.branches?.forEach((br: any) => {
-                            if (!branchMap.has(br.id)) {
-                                branchMap.set(br.id, { 
-                                    ...br, 
-                                    schoolId: sch.id, 
-                                    schoolName: normalizedKey,
-                                    programId: p.id,
-                                    programName: p.name
-                                });
-                            }
+                            branchList.push({ 
+                                ...br, 
+                                schoolId: sch.id, 
+                                programId: p.id,
+                                programName: p.name
+                            });
 
-                            // Collect subjects from semesters
                             br.semesters?.forEach((sem: any) => {
                                 sem.subjects?.forEach((s: any) => {
                                     subjs.push({
@@ -247,8 +244,8 @@ export default function ExamsPage() {
                     });
                 });
                 
-                setSchools(Object.values(schoolMap));
-                setAllBranches(Array.from(branchMap.values()));
+                setSchools(Array.from(schoolMap.values()));
+                setAllBranches(branchList);
                 setSubjects(subjs);
             }
         } catch {}
@@ -263,33 +260,31 @@ export default function ExamsPage() {
         ]).finally(() => setLoading(false));
     }, [fetchSchemas, fetchInstances, fetchBatches, fetchStructure]);
 
-    // Sync School and Branch when Batch is selected or data loads
+    // Fresh sync when switching to Marks tab
     useEffect(() => {
-        if (marksBatchId && batches.length > 0) {
-            const b = batches.find(b => b.id === marksBatchId);
-            if (b) {
-                const brId = b.branchId || b.branch?.id || "";
-                setMarksBranchId(brId);
-                
-                const sId = b.branch?.schoolId || b.branch?.school?.id || "";
-                if (sId) {
-                    // Find the canonical ID for this school name in our deduplicated list
-                    const originalSchool = schools.find(s => s.originalIds?.includes(sId));
-                    if (originalSchool) {
-                        setMarksSchoolId(originalSchool.id);
-                    } else {
-                        setMarksSchoolId(sId);
-                    }
-                } else if (brId && allBranches.length > 0) {
-                    const foundBr = allBranches.find(br => br.id === brId);
-                    if (foundBr?.schoolName) {
-                        const canonicalSchool = schools.find(s => s.name.toLowerCase() === foundBr.schoolName);
-                        if (canonicalSchool) setMarksSchoolId(canonicalSchool.id);
-                    }
-                }
-            }
+        if (activeTab === 'marks') {
+            fetchBatches();
+            fetchStructure();
+            fetchInstances();
         }
-    }, [marksBatchId, batches, allBranches]);
+    }, [activeTab, fetchBatches, fetchStructure, fetchInstances]);
+
+    // Auto-resolve specific Batch ID when selections change
+    useEffect(() => {
+        if (marksBatchName && marksBranchId) {
+            const specificBatch = batches.find(b => 
+                getCohortName(b.name) === marksBatchName && (b.branchId === marksBranchId || b.branch?.id === marksBranchId)
+            );
+            if (specificBatch) {
+                setMarksBatchId(specificBatch.id);
+                if (!marksSemester) setMarksSemester(specificBatch.currentSemester);
+            } else {
+                setMarksBatchId("");
+            }
+        } else {
+            setMarksBatchId("");
+        }
+    }, [marksBatchName, marksBranchId, batches]);
 
     const componentTotal = schemaComponents.reduce((sum, c) => sum + c.maxMarks, 0);
     const isValidTotal = componentTotal === schemaTotalMarks;
@@ -816,35 +811,21 @@ export default function ExamsPage() {
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/30 block ml-1">Batch</label>
                                         <select 
-                                            value={marksBatchId}
+                                            value={marksBatchName}
                                             onChange={(e) => {
-                                                const bId = e.target.value;
-                                                setMarksBatchId(bId);
-                                                const b = batches.find(b => b.id === bId);
-                                                if (b) {
-                                                    setMarksSemester(b.currentSemester);
-                                                    
-                                                    // Directly get from batch object if backend included it
-                                                    const sId = b.branch?.schoolId || b.branch?.school?.id || "";
-                                                    const brId = b.branchId || b.branch?.id || "";
-                                                    
-                                                    // Fallback to allBranches if direct nested data is missing
-                                                    if (!sId && brId && allBranches.length > 0) {
-                                                        const foundBr = allBranches.find(br => br.id === brId);
-                                                        setMarksSchoolId(foundBr?.schoolId || "");
-                                                    } else {
-                                                        setMarksSchoolId(sId);
-                                                    }
-                                                    
-                                                    setMarksBranchId(brId);
-                                                }
+                                                setMarksBatchName(e.target.value);
+                                                setMarksSchoolId("");
+                                                setMarksBranchId("");
+                                                setMarksBatchId("");
                                                 setMarksSubjectId("");
                                                 setMarksComponentId("");
                                             }}
                                             className="w-full px-4 py-2.5 rounded-xl border border-[#1C1C1A]/10 bg-white text-xs font-bold focus:outline-none focus:border-brand-green"
                                         >
                                             <option value="">Select Batch</option>
-                                            {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                            {uniqueBatchNames.map(name => (
+                                                <option key={name} value={name}>{name}</option>
+                                            ))}
                                         </select>
                                     </div>
                                     <div className="space-y-1.5">
@@ -859,7 +840,9 @@ export default function ExamsPage() {
                                             className="w-full px-4 py-2.5 rounded-xl border border-[#1C1C1A]/10 bg-white text-xs font-bold focus:outline-none focus:border-brand-green"
                                         >
                                             <option value="">Sem</option>
-                                            {[1,2,3,4,5,6,7,8].map(s => <option key={s} value={s}>{s}</option>)}
+                                            {Array.from({ length: maxSemesters }, (_, i) => i + 1).map(s => (
+                                                <option key={s} value={s}>{s}</option>
+                                            ))}
                                         </select>
                                     </div>
                                     <div className="space-y-1.5">
@@ -898,7 +881,7 @@ export default function ExamsPage() {
                                             className="w-full px-4 py-2.5 rounded-xl border border-[#1C1C1A]/10 bg-white text-xs font-bold focus:outline-none focus:border-brand-green"
                                         >
                                             <option value="">Select School</option>
-                                            {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                            {filteredSchoolOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                         </select>
                                     </div>
                                     <div className="space-y-1.5">
@@ -908,11 +891,8 @@ export default function ExamsPage() {
                                             onChange={(e) => {
                                                 const val = e.target.value;
                                                 setMarksBranchId(val);
-                                                
-                                                // Sync batch ID to the specific one for this branch
-                                                const currentBatch = batches.find(b => b.id === marksBatchId);
-                                                const actualBatch = batches.find(b => b.name === currentBatch?.name && (b.branchId === val || b.branch?.id === val));
-                                                if (actualBatch) setMarksBatchId(actualBatch.id);
+                                                setMarksSubjectId("");
+                                                setMarksComponentId("");
                                                 
                                                 setMarksSubjectId("");
                                                 setMarksComponentId("");
@@ -1523,7 +1503,7 @@ export default function ExamsPage() {
                                             />
                                             <div className={`w-full px-4 py-8 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-2 transition-all ${importFile ? 'border-brand-green bg-brand-green/5' : 'border-[#1C1C1A]/10 bg-[#F4F2EB]/50 group-hover:border-[#1C1C1A]/20'}`}>
                                                 <Layers className={importFile ? 'text-brand-green' : 'text-[#1C1C1A]/20'} size={32} />
-                                                <span className="text-sm font-bold text-[#1C1C1A]">{importFile ? importFile.name : 'Click to select or drag Excel file'}</span>
+                                                <span className="text-sm font-bold text-[#1C1C1A]">{importFile ? importFile?.name : 'Click to select or drag Excel file'}</span>
                                                 <span className="text-[10px] text-[#1C1C1A]/40 uppercase tracking-widest">Excel files only (.xlsx) (Max 5MB)</span>
                                             </div>
                                         </div>

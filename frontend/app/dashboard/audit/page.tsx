@@ -59,8 +59,8 @@ export default function AuditLogsPage() {
                 entity: entityFilter
             });
             const response = await api.get(`/api/v1/admin/audit-logs?${params}`);
-            setLogs(response.data.logs);
-            setTotal(response.data.total);
+            setLogs(response.logs);
+            setTotal(response.total);
         } catch (error) {
             console.error("Failed to fetch logs:", error);
         } finally {
@@ -92,7 +92,8 @@ export default function AuditLogsPage() {
 
     const formatMetadata = (log: AuditLog) => {
         if (log.action === 'LOGIN') {
-            return `Logged into the system from IP ${log.ipAddress || 'unknown'}`;
+            const ip = log.ipAddress === '::1' || log.ipAddress === '127.0.0.1' ? 'Localhost' : log.ipAddress;
+            return `Logged into the system from IP ${ip || 'unknown'}`;
         }
         
         if (log.action === 'CREATE' && log.entity === 'User') {

@@ -9,6 +9,9 @@ export const createAuditLog = async (
     metadata?: any,
     ipAddress?: string
 ) => {
+    // Normalize localhost
+    const normalizedIp = (ipAddress === '::1' || ipAddress === '127.0.0.1') ? '127.0.0.1' : ipAddress;
+    
     try {
         await db.auditLog.create({
             data: {
@@ -17,7 +20,7 @@ export const createAuditLog = async (
                 entity,
                 entityId,
                 metadata: metadata ? JSON.parse(JSON.stringify(metadata)) : undefined,
-                ipAddress
+                ipAddress: normalizedIp
             }
         });
     } catch (error) {

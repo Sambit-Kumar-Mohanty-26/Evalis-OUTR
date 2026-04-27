@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { db } from '../../config/db';
 import { AuthRequest } from '../../middleware/authMiddleware';
+import { BatchSyncService } from '../../services/batchSyncService';
 
 const p = (v: string | string[] | undefined): string => Array.isArray(v) ? v[0] : (v || '');
 
@@ -10,7 +11,15 @@ export const getBatches = async (req: AuthRequest, res: Response): Promise<void>
     try {
         const tenantId = req.user!.tenantId;
 
+        // Automatically sync batches with academic structure
+        try {
+            await BatchSyncService.syncAllBatches(tenantId);
+        } catch (e) {
+            console.warn('Batch Auto-sync failed:', e);
+        }
+
         const batches = await db.batch.findMany({
+
             where: {
                 isDeleted: false,
                 academicYear: { tenantId }

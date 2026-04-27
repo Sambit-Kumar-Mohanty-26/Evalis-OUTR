@@ -11,8 +11,10 @@ interface MarksEntryPanelProps {
     preselectedSubjectId?: string;
 }
 
-const normalizeSchoolName = (name: string) =>
-    name.trim().toLowerCase().replace(/\bschool\b/g, '').replace(/\bof\b/g, '').replace(/sciences?$/, 'science').replace(/[^a-z0-9]/g, '');
+const getCohortName = (name: string) => {
+    const match = name.match(/(\d{4}-\d{4})/);
+    return match ? match[1] : name;
+};
 
 export function MarksEntryPanel({ preselectedBatchId, preselectedSubjectId }: MarksEntryPanelProps) {
     const [batches, setBatches] = useState<any[]>([]);
@@ -24,6 +26,7 @@ export function MarksEntryPanel({ preselectedBatchId, preselectedSubjectId }: Ma
     const [schemas, setSchemas] = useState<any[]>([]);
 
     const [marksBatchId, setMarksBatchId] = useState(preselectedBatchId || "");
+    const [marksBatchName, setMarksBatchName] = useState("");
     const [marksSemester, setMarksSemester] = useState<number | "">("");
     const [marksInstanceId, setMarksInstanceId] = useState("");
     const [marksSchoolId, setMarksSchoolId] = useState("");
@@ -52,23 +55,31 @@ export function MarksEntryPanel({ preselectedBatchId, preselectedSubjectId }: Ma
             setSchemas(schemaData.schemas || []);
 
             if (structData?.programs) {
-                const schoolMap: Record<string, any> = {};
-                const branchMap = new Map<string, any>();
-                const subjs: any[] = [];
-                structData.programs.forEach((p: any) => {
-                    p.schools?.forEach((sch: any) => {
-                        const key = normalizeSchoolName(sch.name);
-                        if (!schoolMap[key]) schoolMap[key] = { id: sch.id, name: sch.name, originalIds: [sch.id] };
-                        else schoolMap[key].originalIds.push(sch.id);
+                const schoolList: any[] = [];
+                const branchList: any[] = [];
+                const subjectList: any[] = [];
+                const schoolIds = new Set();
+
+                structData.programs.forEach((prog: any) => {
+                    prog.schools?.forEach((sch: any) => {
+                        if (!schoolIds.has(sch.id)) {
+                            schoolList.push({ id: sch.id, name: sch.name });
+                            schoolIds.add(sch.id);
+                        }
                         sch.branches?.forEach((br: any) => {
-                            if (!branchMap.has(br.id)) branchMap.set(br.id, { ...br, schoolId: sch.id, schoolName: key, programName: p.name });
-                            br.semesters?.forEach((sem: any) => sem.subjects?.forEach((s: any) => subjs.push({ ...s, branchId: br.id, semesterNumber: sem.semesterNumber })));
+                            branchList.push({ ...br, schoolId: sch.id });
+                            br.semesters?.forEach((sem: any) => {
+                                sem.subjects?.forEach((sub: any) => {
+                                    subjectList.push({ ...sub, branchId: br.id, semesterNumber: sem.semesterNumber });
+                                });
+                            });
                         });
                     });
                 });
-                setSchools(Object.values(schoolMap));
-                setAllBranches(Array.from(branchMap.values()));
-                setSubjects(subjs);
+
+                setSchools(schoolList);
+                setAllBranches(branchList);
+                setSubjects(subjectList);
             }
         } catch { toast.error("Failed to load data"); }
         finally { setLoading(false); }
@@ -77,33 +88,66 @@ export function MarksEntryPanel({ preselectedBatchId, preselectedSubjectId }: Ma
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
     useEffect(() => {
-        if (marksBatchId && batches.length > 0) {
+        if (marksBatchId && batches.length > 0 && !marksBatchName) {
             const b = batches.find(b => b.id === marksBatchId);
             if (b) {
+                setMarksBatchName(getCohortName(b.name));
                 setMarksSemester(b.currentSemester);
                 const brId = b.branchId || b.branch?.id || "";
                 setMarksBranchId(brId);
                 const sId = b.branch?.schoolId || b.branch?.school?.id || "";
-                if (sId) {
-                    const s = schools.find(s => s.originalIds?.includes(sId));
-                    setMarksSchoolId(s ? s.id : sId);
-                }
+                if (sId) setMarksSchoolId(sId);
             }
         }
-    }, [marksBatchId, batches, schools]);
+    }, [marksBatchId, batches, marksBatchName]);
+
+    useEffect(() => {
+        if (marksBatchName && marksBranchId) {
+            const batch = batches.find(b => 
+                getCohortName(b.name) === marksBatchName && 
+                (b.branchId === marksBranchId || b.branch?.id === marksBranchId)
+            );
+            if (batch) setMarksBatchId(batch.id);
+        }
+    }, [marksBatchName, marksBranchId, batches]);
+
+    const uniqueBatchNames = useMemo(() => {
+        const names = batches
+            .map(b => getCohortName(b.name))
+            .filter(name => name !== "New Entity" && !name.includes("New Entity"));
+        return Array.from(new Set(names)).sort();
+    }, [batches]);
+
+    const filteredSchoolOptions = useMemo(() => {
+        if (!marksBatchName) return schools;
+        const batchSpecificBranches = batches.filter(b => getCohortName(b.name) === marksBatchName);
+        const schoolIds = new Set(batchSpecificBranches.map(b => b.branch?.schoolId || b.branch?.school?.id));
+        return schools.filter(s => schoolIds.has(s.id));
+    }, [marksBatchName, schools, batches]);
 
     const filteredBranchOptions = useMemo(() => {
         if (!marksSchoolId) return [];
-        const selectedSchool = schools.find(s => s.id === marksSchoolId || s.originalIds?.includes(marksSchoolId));
-        if (!selectedSchool) return [];
-        const currentBatch = batches.find(b => b.id === marksBatchId);
-        const batchProgramName = currentBatch?.branch?.school?.program?.name?.trim().toLowerCase();
-        let branches = allBranches.filter(br => br.schoolName === normalizeSchoolName(selectedSchool.name));
-        if (batchProgramName) branches = branches.filter(br => br.programName?.trim().toLowerCase() === batchProgramName);
-        const map = new Map();
-        branches.forEach(br => { const k = br.name.toLowerCase().replace(/[^a-z0-9]/g, ''); if (!map.has(k)) map.set(k, { id: br.id, name: br.name }); });
-        return Array.from(map.values());
-    }, [marksSchoolId, marksBatchId, schools, batches, allBranches]);
+        let options = allBranches.filter(br => br.schoolId === marksSchoolId && br.name !== "New Entity");
+        if (marksBatchName) {
+            const batchBranchIds = new Set(batches.filter(b => getCohortName(b.name) === marksBatchName).map(b => b.branchId || b.branch?.id));
+            options = options.filter(br => batchBranchIds.has(br.id));
+        }
+        return options;
+    }, [marksSchoolId, marksBatchName, allBranches, batches]);
+
+    const maxSemesters = useMemo(() => {
+        let matchingBranches = allBranches;
+        if (marksBatchName) {
+            const batchBranchIds = new Set(batches.filter(b => getCohortName(b.name) === marksBatchName).map(b => b.branchId || b.branch?.id));
+            matchingBranches = matchingBranches.filter(br => batchBranchIds.has(br.id));
+        }
+        if (marksSchoolId) matchingBranches = matchingBranches.filter(br => br.schoolId === marksSchoolId);
+        if (marksBranchId) matchingBranches = matchingBranches.filter(br => br.id === marksBranchId);
+        if (matchingBranches.length === 0) return 8;
+        const counts = matchingBranches.map(br => br.semesters?.length || 0);
+        const max = Math.max(...counts);
+        return max > 0 ? max : 8;
+    }, [marksBatchName, marksSchoolId, marksBranchId, allBranches, batches]);
 
     const fetchStudentsForMarks = useCallback(async (batchId: string) => {
         if (!batchId) return;
@@ -163,8 +207,8 @@ export function MarksEntryPanel({ preselectedBatchId, preselectedSubjectId }: Ma
             <div className="bg-white/70 backdrop-blur-sm border border-[#1C1C1A]/5 rounded-3xl p-6 shadow-sm space-y-4">
                 <div className="grid grid-cols-3 gap-4">
                     {[
-                        { label: "Batch", value: marksBatchId, onChange: (v: string) => { setMarksBatchId(v); setMarksSubjectId(""); setMarksComponentId(""); }, options: batches.map(b => ({ value: b.id, label: b.name })) },
-                        { label: "Semester", value: String(marksSemester), onChange: (v: string) => { setMarksSemester(parseInt(v) || ""); setMarksSubjectId(""); setMarksComponentId(""); }, options: [1,2,3,4,5,6,7,8].map(s => ({ value: String(s), label: `Sem ${s}` })) },
+                        { label: "Batch", value: marksBatchName, onChange: (v: string) => { setMarksBatchName(v); setMarksBatchId(""); setMarksSchoolId(""); setMarksBranchId(""); setMarksSubjectId(""); setMarksComponentId(""); }, options: uniqueBatchNames.map(name => ({ value: name, label: name })) },
+                        { label: "Semester", value: String(marksSemester), onChange: (v: string) => { setMarksSemester(parseInt(v) || ""); setMarksSubjectId(""); setMarksComponentId(""); }, options: Array.from({ length: Number(maxSemesters) }, (_, i) => ({ value: String(i + 1), label: String(i + 1) })) },
                         { label: "Exam", value: marksInstanceId, onChange: (v: string) => { setMarksInstanceId(v); setMarksSubjectId(""); setMarksComponentId(""); }, options: instances.filter(i => i.batch?.id === marksBatchId && i.semester === marksSemester).map(i => ({ value: i.id, label: `${i.name} (${i.status}${i.marksEntryClosed ? ' - CLOSED' : ''})` })) },
                     ].map(sel => (
                         <div key={sel.label} className="space-y-1.5">
@@ -181,7 +225,7 @@ export function MarksEntryPanel({ preselectedBatchId, preselectedSubjectId }: Ma
                         <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/30 block ml-1">School</label>
                         <select value={marksSchoolId} onChange={e => { setMarksSchoolId(e.target.value); setMarksBranchId(""); setMarksSubjectId(""); }} className="w-full px-4 py-2.5 rounded-xl border border-[#1C1C1A]/10 bg-white text-xs font-bold focus:outline-none focus:border-brand-green">
                             <option value="">Select School</option>
-                            {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            {filteredSchoolOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                     </div>
                     <div className="space-y-1.5">
@@ -283,7 +327,7 @@ export function MarksEntryPanel({ preselectedBatchId, preselectedSubjectId }: Ma
                                 <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setImportFile(e.target.files?.[0] || null)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                                 <div className={`w-full px-4 py-8 border-2 border-dashed rounded-2xl flex flex-col items-center gap-2 transition-all ${importFile ? 'border-brand-green bg-brand-green/5' : 'border-[#1C1C1A]/10 bg-[#F4F2EB]/50'}`}>
                                     <Layers className={importFile ? 'text-brand-green' : 'text-[#1C1C1A]/20'} size={32} />
-                                    <span className="text-sm font-bold text-[#1C1C1A]">{importFile ? importFile.name : 'Click to select Excel file'}</span>
+                                    <span className="text-sm font-bold text-[#1C1C1A]">{importFile ? importFile?.name : 'Click to select Excel file'}</span>
                                 </div>
                             </div>
                             {(importType === 'INTERNAL_GROUP' || importType === 'EXTERNAL_GROUP') && (

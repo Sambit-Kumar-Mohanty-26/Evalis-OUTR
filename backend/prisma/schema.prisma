@@ -143,7 +143,10 @@ model Branch {
   school    AcademicSchool @relation(fields: [schoolId], references: [id])
   orgNodeId String?  // Link to Organization Level 3 (Branch/Dept)
   orgNode   OrganizationNode? @relation(fields: [orgNodeId], references: [id])
+  advisorId String?
+  advisor   User?    @relation("BranchAdvisor", fields: [advisorId], references: [id])
   semesters Semester[]
+
   batches   Batch[]
   isDeleted Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -432,7 +435,9 @@ model User {
   // Relations for Org & Academic
   managedNodes          OrganizationNode[] @relation("NodeAdmin")
   taughtSubjects        Subject[]      @relation("SubjectTeacher")
+  advisedBranches       Branch[]       @relation("BranchAdvisor")
   batchId               String?
+
   batch                 Batch?         @relation("BatchStudents", fields: [batchId], references: [id])
   
   // Marks & Results
