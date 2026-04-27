@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 
 async function main() {
     console.log('--- Inspecting Academic Branches ---');
-    const branches = await prisma.academicBranch.findMany({
+    const branches = await prisma.branch.findMany({
         where: { name: { contains: 'New Entity' } },
         include: { school: true }
     });
@@ -19,7 +19,7 @@ async function main() {
 
     console.log('\n--- Current Active Blueprint ---');
     const activeVersion = await prisma.academicVersion.findFirst({
-        where: { status: 'ACTIVE' },
+        where: { isCurrent: true },
         include: {
             programs: {
                 include: {
@@ -35,9 +35,9 @@ async function main() {
     
     if (activeVersion) {
         console.log('Active Version ID:', activeVersion.id);
-        const allBranches = activeVersion.programs.flatMap(p => 
-            p.schools.flatMap(s => 
-                s.branches.map(b => ({ name: b.name, schoolName: s.name }))
+        const allBranches = (activeVersion as any).programs.flatMap((p: any) => 
+            p.schools.flatMap((s: any) => 
+                s.branches.map((b: any) => ({ name: b.name, schoolName: s.name }))
             )
         );
         console.log('All branches in active blueprint:', allBranches);

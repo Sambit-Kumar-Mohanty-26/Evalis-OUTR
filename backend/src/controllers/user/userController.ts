@@ -64,7 +64,7 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
     try {
         const tenantId = req.user!.tenantId;
         const {
-            role, search, schoolId, branchId, batchId,
+            role, search, schoolId, branchId, batchId, batchYear,
             status, page = '1', limit = '20'
         } = req.query as Record<string, string>;
 
@@ -85,6 +85,9 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
         }
 
         if (batchId) where.batchId = batchId;
+        else if (batchYear) {
+            where.batch = { name: batchYear };
+        }
 
         if (branchId) {
             const branch = await db.branch.findUnique({ where: { id: branchId }, select: { orgNodeId: true } });
@@ -164,12 +167,33 @@ export const getUserMetadata = async (req: AuthRequest, res: Response): Promise<
                 select: { id: true, name: true, programId: true, orgNodeId: true }
             }),
             db.branch.findMany({
-                where: { isDeleted: false, school: { program: { version: { tenantId, isCurrent: true } } } },
+                where: { 
+                    isDeleted: false, 
+                    name: { not: "New Entity" },
+                    school: { program: { version: { tenantId, isCurrent: true } } } 
+                },
                 select: { id: true, name: true, schoolId: true, orgNodeId: true }
             }),
             db.batch.findMany({
-                where: { isDeleted: false, branch: { school: { program: { version: { tenantId, isCurrent: true } } } } },
-                select: { id: true, name: true, branchId: true, academicYearId: true },
+                where: { 
+                    isDeleted: false, 
+                    branch: { 
+                        isDeleted: false,
+                        name: { not: "New Entity" },
+                        school: { program: { version: { tenantId, isCurrent: true } } } 
+                    } 
+                },
+                include: {
+                    branch: {
+                        select: {
+                            id: true,
+                            name: true,
+                            school: {
+                                select: { id: true, name: true }
+                            }
+                        }
+                    }
+                },
                 orderBy: { createdAt: 'desc' }
             }),
             db.subject.findMany({
@@ -179,7 +203,28 @@ export const getUserMetadata = async (req: AuthRequest, res: Response): Promise<
             })
         ]);
 
-        res.json({ orgNodes, programs, schools, branches, batches, subjects });
+        const mappings = batches.map(b => ({
+            batchId: b.id,
+            batchName: b.name,
+            branchId: b.branch.id,
+            branchName: b.branch.name,
+            schoolId: b.branch.school.id,
+            schoolName: b.branch.school.name
+        }));
+
+        res.json({ 
+            orgNodes, 
+            programs, 
+            schools, 
+            branches, 
+            batches: batches.map(b => ({ 
+                id: b.id, 
+                name: b.name,
+                branchId: b.branchId 
+            })), 
+            subjects, 
+            mappings 
+        });
     } catch (error) {
         console.error('Get Metadata Error:', error);
         res.status(500).json({ error: 'Failed to retrieve metadata.' });

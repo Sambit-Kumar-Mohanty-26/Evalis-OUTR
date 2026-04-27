@@ -52,6 +52,7 @@ interface Metadata {
     branches: { id: string; name: string; schoolId: string; orgNodeId: string }[];
     batches: { id: string; name: string; branchId: string }[];
     subjects: { id: string; name: string; code: string }[];
+    mappings?: any[];
 }
 
 type TabType = "teachers" | "students" | "admin";
@@ -74,12 +75,13 @@ export default function UsersPage() {
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
     const [limit] = useState(15);
-    const [metadata, setMetadata] = useState<Metadata>({ orgNodes: [], programs: [], schools: [], branches: [], batches: [], subjects: [] });
+    const [metadata, setMetadata] = useState<Metadata>({ orgNodes: [], programs: [], schools: [], branches: [], batches: [], subjects: [], mappings: [] });
 
     // Filters
     const [showFilters, setShowFilters] = useState(false);
     const [filterSchool, setFilterSchool] = useState("");
     const [filterBranch, setFilterBranch] = useState("");
+    const [filterBatchYear, setFilterBatchYear] = useState(""); // New: Filter by year range (e.g. 2023-2027)
     const [filterBatch, setFilterBatch] = useState("");
     const [filterStatus, setFilterStatus] = useState("all");
     const [filterProgram, setFilterProgram] = useState("");
@@ -129,6 +131,7 @@ export default function UsersPage() {
             if (filterSchool) params.set("schoolId", filterSchool);
             if (filterBranch) params.set("branchId", filterBranch);
             if (filterBatch) params.set("batchId", filterBatch);
+            if (filterBatchYear) params.set("batchYear", filterBatchYear);
             if (filterStatus !== "all") params.set("status", filterStatus);
             params.set("page", String(page));
             params.set("limit", String(limit));
@@ -237,6 +240,7 @@ export default function UsersPage() {
     const clearFilters = () => {
         setFilterSchool("");
         setFilterBranch("");
+        setFilterBatchYear("");
         setFilterBatch("");
         setFilterStatus("all");
         setFilterProgram("");
@@ -381,36 +385,58 @@ export default function UsersPage() {
                                 )}
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {activeTab !== "students" && (
-                                    <FilterSelect
-                                        label="School"
-                                        value={filterSchool}
-                                        onChange={(v) => { setFilterSchool(v); setFilterBranch(""); setFilterBatch(""); }}
-                                        options={metadata.schools.map(s => ({ value: s.id, label: s.name }))}
-                                    />
-                                )}
                                 {activeTab === "students" && (
                                     <FilterSelect
-                                        label="Program"
-                                        value={filterProgram}
-                                        onChange={setFilterProgram}
-                                        options={metadata.programs.map(p => ({ value: p.id, label: p.name }))}
+                                        label="Academic Batch (Year)"
+                                        value={filterBatchYear}
+                                        onChange={(v) => { 
+                                            setFilterBatchYear(v); 
+                                            setFilterSchool(""); 
+                                            setFilterBranch(""); 
+                                            setFilterBatch(""); 
+                                        }}
+                                        options={(() => {
+                                            const uniqueNames = Array.from(new Set((metadata.mappings || []).map(m => m.batchName)));
+                                            return uniqueNames.sort().reverse().map(name => ({ value: name, label: name }));
+                                        })()}
                                     />
                                 )}
+
+                                <FilterSelect
+                                    label="School / Faculty"
+                                    value={filterSchool}
+                                    onChange={(v) => { setFilterSchool(v); setFilterBranch(""); setFilterBatch(""); }}
+                                    options={(() => {
+                                        if (activeTab === "students" && filterBatchYear) {
+                                            const filtered = (metadata.mappings || []).filter(m => m.batchName === filterBatchYear);
+                                            const uniqueSchools = Array.from(new Set(filtered.map(m => ({ id: m.schoolId, name: m.schoolName }))));
+                                            return uniqueSchools.map(s => ({ value: s.id, label: s.name }));
+                                        }
+                                        return metadata.schools.map(s => ({ value: s.id, label: s.name }));
+                                    })()}
+                                />
+
                                 <FilterSelect
                                     label="Branch / Department"
                                     value={filterBranch}
-                                    onChange={(v) => { setFilterBranch(v); setFilterBatch(""); }}
-                                    options={filteredBranches.map(b => ({ value: b.id, label: b.name }))}
+                                    onChange={(v) => { 
+                                        setFilterBranch(v); 
+                                        setFilterBatch("");
+                                        if (activeTab === "students" && filterBatchYear && v) {
+                                            const mapping = (metadata.mappings || []).find(m => m.batchName === filterBatchYear && m.branchId === v);
+                                            if (mapping) setFilterBatch(mapping.batchId);
+                                        }
+                                    }}
+                                    options={(() => {
+                                        if (activeTab === "students" && filterBatchYear) {
+                                            return (metadata.mappings || [])
+                                                .filter(m => m.batchName === filterBatchYear && (!filterSchool || m.schoolId === filterSchool))
+                                                .map(m => ({ value: m.branchId, label: m.branchName }));
+                                        }
+                                        return filteredBranches.map(b => ({ value: b.id, label: b.name }));
+                                    })()}
                                 />
-                                {activeTab === "students" && (
-                                    <FilterSelect
-                                        label="Batch"
-                                        value={filterBatch}
-                                        onChange={setFilterBatch}
-                                        options={filteredBatches.map(b => ({ value: b.id, label: b.name }))}
-                                    />
-                                )}
+
                                 <FilterSelect
                                     label="Status"
                                     value={filterStatus}

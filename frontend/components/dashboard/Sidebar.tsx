@@ -29,6 +29,7 @@ const hosMenuItems = [
     { name: "Branch Performance", icon: Building2, href: "/dashboard/hos/branches" },
     { name: "Subject Analysis", icon: BookOpen, href: "/dashboard/hos/subjects" },
     { name: "Backlog Heatmap", icon: Flame, href: "/dashboard/hos/heatmap" },
+    { name: "Analytics", icon: BarChart3, href: "/dashboard/hos/analytics" },
     { name: "Marks Entry", icon: PenLine, href: "/dashboard/hos/marks" },
 ];
 
@@ -38,12 +39,14 @@ const advisorMenuItems = [
     { name: "At-Risk Students", icon: TrendingDown, href: "/dashboard/advisor/at-risk" },
     { name: "Subject Performance", icon: BarChart3, href: "/dashboard/advisor/subjects" },
     { name: "Marks Entry", icon: PenLine, href: "/dashboard/advisor/marks" },
+    { name: "Analytics", icon: BarChart3, href: "/dashboard/advisor/analytics" },
 ];
 
 const teacherMenuItems = [
     { name: "My Subjects", icon: BookOpen, href: "/dashboard/teacher" },
     { name: "Marks Entry", icon: PenLine, href: "/dashboard/teacher/marks" },
     { name: "Performance", icon: BarChart3, href: "/dashboard/teacher/performance" },
+    { name: "Analytics", icon: BarChart3, href: "/dashboard/teacher/analytics" },
 ];
 
 const studentMenuItems = [
@@ -51,6 +54,7 @@ const studentMenuItems = [
     { name: "My Marks", icon: ClipboardList, href: "/dashboard/student/marks" },
     { name: "Backlogs", icon: AlertCircle, href: "/dashboard/student/backlogs" },
     { name: "History", icon: History, href: "/dashboard/student/history" },
+    { name: "Analytics", icon: BarChart3, href: "/dashboard/student/analytics" },
 ];
 
 function getMenuItems(role?: string) {

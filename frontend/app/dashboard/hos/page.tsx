@@ -108,10 +108,10 @@ export default function HOSOverview() {
                 </div>
                 <div className="flex items-center gap-3">
                     {alerts.length > 0 && (
-                        <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-100 rounded-2xl">
+                        <Link href="/dashboard/hos/analytics" className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-100 rounded-2xl hover:bg-red-100 transition-colors">
                             <Bell size={16} className="text-red-500" />
                             <span className="text-sm font-bold text-red-500">{alerts.length} Alert{alerts.length > 1 ? 's' : ''}</span>
-                        </div>
+                        </Link>
                     )}
                 </div>
             </div>
@@ -139,25 +139,7 @@ export default function HOSOverview() {
                         <BranchPerformanceChart data={branches} />
                     </div>
 
-                    {/* Alerts Section */}
-                    {alerts.length > 0 && (
-                        <div className="space-y-4">
-                            <h2 className="text-xl font-serif text-[#1C1C1A] flex items-center gap-2">
-                                <AlertTriangle className="text-amber-500" size={20} /> Critical Alerts
-                            </h2>
-                            <div className="grid gap-3">
-                                {alerts.map((alert, i) => (
-                                    <div key={i} className={`flex items-start gap-4 p-4 rounded-2xl border ${alert.severity === 'ERROR' ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'}`}>
-                                        <AlertTriangle size={18} className={alert.severity === 'ERROR' ? 'text-red-500 mt-0.5' : 'text-amber-500 mt-0.5'} />
-                                        <div>
-                                            <p className={`text-sm font-bold ${alert.severity === 'ERROR' ? 'text-red-700' : 'text-amber-700'}`}>{alert.type.replace('_', ' ')}</p>
-                                            <p className={`text-sm ${alert.severity === 'ERROR' ? 'text-red-600' : 'text-amber-600'}`}>{alert.message}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    {/* Alerts moved to Analytics Tab */}
                 </div>
 
                 {/* Right Column: Staffing & Quick Links */}

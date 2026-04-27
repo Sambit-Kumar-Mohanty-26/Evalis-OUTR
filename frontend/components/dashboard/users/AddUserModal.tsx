@@ -14,6 +14,7 @@ interface Metadata {
     branches: { id: string; name: string; schoolId: string; orgNodeId: string }[];
     batches: { id: string; name: string; branchId: string }[];
     subjects: { id: string; name: string; code: string; semesterId: string }[];
+    mappings: { batchId: string; batchName: string; branchId: string; branchName: string; schoolId: string; schoolName: string }[];
 }
 
 interface AddUserModalProps {
@@ -42,7 +43,7 @@ const FormField = ({ label, children }: { label: string; children: React.ReactNo
 export default function AddUserModal({ isOpen, onClose, onSuccess, activeTab }: AddUserModalProps) {
     const isStudent = activeTab === "students";
     const [metadata, setMetadata] = useState<Metadata>({
-        orgNodes: [], programs: [], schools: [], branches: [], batches: [], subjects: []
+        orgNodes: [], programs: [], schools: [], branches: [], batches: [], subjects: [], mappings: []
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -57,7 +58,8 @@ export default function AddUserModal({ isOpen, onClose, onSuccess, activeTab }: 
     const [selectedRole, setSelectedRole] = useState(isStudent ? "STUDENT" : "TEACHER");
     const [selectedSchool, setSelectedSchool] = useState("");
     const [selectedBranch, setSelectedBranch] = useState("");
-    const [selectedBatch, setSelectedBatch] = useState("");
+    const [selectedBatchName, setSelectedBatchName] = useState(""); // Track the year range name (e.g. 2023-2027)
+    const [selectedBatch, setSelectedBatch] = useState(""); // This stores the actual ID for submission
     const [rollNumber, setRollNumber] = useState("");
     const [currentSemester, setCurrentSemester] = useState("1");
     const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
@@ -279,48 +281,118 @@ export default function AddUserModal({ isOpen, onClose, onSuccess, activeTab }: 
                                 <div>
                                     <SectionLabel>Institutional Placement</SectionLabel>
                                     <div className="grid grid-cols-2 gap-4 mt-3">
-                                        <FormField label="School / Faculty">
-                                            <CustomSelect
-                                                value={selectedSchool}
-                                                onChange={setSelectedSchool}
-                                                options={(() => {
-                                                    const seen = new Set();
-                                                    return metadata.schools.filter(s => {
-                                                        const normalized = s.name.trim().toLowerCase();
-                                                        if (seen.has(normalized)) return false;
-                                                        seen.add(normalized);
-                                                        return true;
-                                                    }).map(s => ({ value: s.name, label: s.name }));
-                                                })()}
-                                                compact
-                                            />
-                                        </FormField>
-                                        {selectedRole !== "HEAD_OF_SCHOOL" && (
-                                            <FormField label={selectedRole === "ADVISOR" ? "Advisor Branch" : "Department / Branch"}>
-                                                <CustomSelect
-                                                    value={selectedBranch}
-                                                    onChange={setSelectedBranch}
-                                                    options={filteredBranches.map(b => ({ value: b.id, label: b.name }))}
-                                                    compact
-                                                />
-                                            </FormField>
+                                        {/* 
+                                            STRICT FLOW FOR STUDENTS: 
+                                            1. Batch (Year Range) -> e.g. 2023-2027
+                                            2. School -> Schools available for that year
+                                            3. Branch -> Branches available for that school/year
+                                        */}
+                                        {isStudent ? (
+                                            <>
+                                                <div className="col-span-2">
+                                                    <FormField label="Academic Batch (Year Range)">
+                                                        <CustomSelect
+                                                            value={selectedBatchName}
+                                                            onChange={(val) => {
+                                                                setSelectedBatchName(val);
+                                                                setSelectedSchool("");
+                                                                setSelectedBranch("");
+                                                                setSelectedBatch("");
+                                                            }}
+                                                            options={(() => {
+                                                                const uniqueNames = Array.from(new Set(metadata.mappings.map(m => m.batchName)));
+                                                                return uniqueNames.sort().reverse().map(name => ({ value: name, label: name }));
+                                                            })()}
+                                                            compact
+                                                        />
+                                                    </FormField>
+                                                </div>
+
+                                                <FormField label="School / Faculty">
+                                                    <CustomSelect
+                                                        value={selectedSchool}
+                                                        onChange={(val) => {
+                                                            setSelectedSchool(val);
+                                                            setSelectedBranch("");
+                                                            setSelectedBatch("");
+                                                        }}
+                                                        options={(() => {
+                                                            const filtered = metadata.mappings.filter(m => !selectedBatchName || m.batchName === selectedBatchName);
+                                                            const uniqueSchools = Array.from(new Set(filtered.map(m => m.schoolName)));
+                                                            return uniqueSchools.map(name => ({ value: name, label: name }));
+                                                        })()}
+                                                        disabled={!selectedBatchName}
+                                                        compact
+                                                    />
+                                                </FormField>
+
+                                                <FormField label="Department / Branch">
+                                                    <CustomSelect
+                                                        value={selectedBranch}
+                                                        onChange={(val) => {
+                                                            setSelectedBranch(val);
+                                                            // Once branch is selected, we have the unique batch ID
+                                                            const mapping = metadata.mappings.find(m => 
+                                                                m.batchName === selectedBatchName && 
+                                                                m.branchId === val
+                                                            );
+                                                            if (mapping) setSelectedBatch(mapping.batchId);
+                                                        }}
+                                                        options={metadata.mappings
+                                                            .filter(m => 
+                                                                (!selectedBatchName || m.batchName === selectedBatchName) && 
+                                                                (!selectedSchool || m.schoolName === selectedSchool)
+                                                            )
+                                                            .map(m => ({ value: m.branchId, label: m.branchName }))
+                                                        }
+                                                        disabled={!selectedSchool}
+                                                        compact
+                                                    />
+                                                </FormField>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FormField label="School / Faculty">
+                                                    <CustomSelect
+                                                        value={selectedSchool}
+                                                        onChange={(val) => {
+                                                            setSelectedSchool(val);
+                                                            setSelectedBranch("");
+                                                            setSelectedBatch("");
+                                                        }}
+                                                        options={(() => {
+                                                            const seen = new Set();
+                                                            return metadata.schools.filter(s => {
+                                                                const normalized = s.name.trim().toLowerCase();
+                                                                if (seen.has(normalized)) return false;
+                                                                seen.add(normalized);
+                                                                return true;
+                                                            }).map(s => ({ value: s.name, label: s.name }));
+                                                        })()}
+                                                        compact
+                                                    />
+                                                </FormField>
+
+                                                {selectedRole !== "HEAD_OF_SCHOOL" && (
+                                                    <FormField label={selectedRole === "ADVISOR" ? "Advisor Branch" : "Department / Branch"}>
+                                                        <CustomSelect
+                                                            value={selectedBranch}
+                                                            onChange={(val) => {
+                                                                setSelectedBranch(val);
+                                                                setSelectedBatch("");
+                                                            }}
+                                                            options={filteredBranches.map(b => ({ value: b.id, label: b.name }))}
+                                                            compact
+                                                        />
+                                                    </FormField>
+                                                )}
+                                            </>
                                         )}
+
                                         {selectedRole === "HEAD_OF_SCHOOL" && (
                                             <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/10 flex items-center gap-3">
                                                 <Building2 className="text-purple-500" size={18} />
                                                 <p className="text-[10px] font-bold text-purple-600/70 uppercase">Manages entire School</p>
-                                            </div>
-                                        )}
-                                        {isStudent && (
-                                            <div className="col-span-2">
-                                                <FormField label="Specific Batch">
-                                                    <CustomSelect
-                                                        value={selectedBatch}
-                                                        onChange={setSelectedBatch}
-                                                        options={filteredBatches.map(b => ({ value: b.id, label: b.name }))}
-                                                        compact
-                                                    />
-                                                </FormField>
                                             </div>
                                         )}
                                     </div>
