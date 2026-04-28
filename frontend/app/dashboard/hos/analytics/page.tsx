@@ -76,7 +76,7 @@ function HOSAnalyticsContent() {
                     { label: "At-Risk Students", value: d?.atRiskCount ?? 0, color: "text-red-500" },
                     { label: "Avg Pass Rate", value: (d?.branchPerformance?.length ?? 0) > 0 ? (d.branchPerformance.reduce((s: number, b: any) => s + b.passRate, 0) / d.branchPerformance.length) : 0, suffix: "%", color: "text-brand-green", decimals: 0 },
                     { label: "Branches", value: (d?.branchPerformance?.length ?? 0), color: "text-blue-500" },
-                    { label: "Top Failure Rate", value: d?.topFailureRate ?? 0, suffix: "%", color: "text-amber-500" },
+                    { label: "Highest Failure Rate", value: d?.highestFailureRate ?? 0, suffix: "%", color: "text-amber-500" },
                 ].map((kpi, i) => (
                     <motion.div key={kpi.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className="bg-white/50 backdrop-blur-xl border border-[#1C1C1A]/5 rounded-2xl p-5">
                         <div className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/30 mb-1">{kpi.label}</div>
@@ -131,8 +131,8 @@ function HOSAnalyticsContent() {
             <div>
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#1C1C1A]/30 mb-6"><Shield size={14} /> Section C — Student Segmentation</div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <ChartCard title="Top 10% Students" subtitle="Highest performers in school" icon={Users} delay={0.1}>
-                        <PerformersTable data={d?.topStudents || hosMockData.topStudents} type="top" />
+                    <ChartCard title="Branch Highest" subtitle="Top performers across all departments" icon={Users} delay={0.1}>
+                        <PerformersTable data={d?.highestStudents || hosMockData.highestStudents} type="highest" />
                     </ChartCard>
                     <ChartCard title="Bottom 10% Students" subtitle="Students needing intervention" icon={AlertTriangle} delay={0.2}>
                         <PerformersTable data={d?.bottomStudents || hosMockData.bottomStudents} type="bottom" />

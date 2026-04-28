@@ -78,11 +78,11 @@ function SubjectPerformanceCard({ subject }: { subject: any }) {
                         <div className="bg-white rounded-2xl p-4 text-center border border-[#1C1C1A]/5 shadow-sm"><div className="text-xl font-serif font-bold text-emerald-500">{stats.passPercent}%</div><div className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40 mt-1">Pass Rate</div></div>
                         <div className="bg-white rounded-2xl p-4 text-center border border-[#1C1C1A]/5 shadow-sm"><div className="text-xl font-serif font-bold text-[#1C1C1A]">{stats.totalResults}</div><div className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40 mt-1">Students</div></div>
                     </div>
-                    {stats.topStudents?.length > 0 && (
+                    {stats.highestStudents?.length > 0 && (
                         <div className="bg-white rounded-2xl p-5 border border-[#1C1C1A]/5 shadow-sm">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40 mb-4 flex items-center gap-2"><Star size={12} /> Top Performing Students</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/40 mb-4 flex items-center gap-2"><Star size={12} /> Branch Highest Students</p>
                             <div className="space-y-2">
-                                {stats.topStudents.map((s: any, i: number) => (
+                                {stats.highestStudents.map((s: any, i: number) => (
                                     <div key={i} className="flex items-center justify-between bg-emerald-50/50 rounded-xl px-4 py-2.5 border border-emerald-100/50">
                                         <div className="flex items-center gap-3">
                                             <div className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center text-[10px] font-black">{i+1}</div>

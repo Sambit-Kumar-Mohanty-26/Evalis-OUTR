@@ -52,8 +52,19 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'Evalis Core', timestamp: new Date().toISOString() });
 });
 
-app.listen(port, () => {
+app.listen(port, async () => {
   console.log(`\n🚀 EVALIS CORE ACTIVE AT PORT ${port}`);
   console.log(`📡 CORS ORIGIN: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
   console.log(`🛡️  SECURITY INTERFACE INITIALIZED\n`);
+
+  // Verify DB connectivity on startup so problems surface immediately
+  try {
+    const { db } = await import('./config/db');
+    await db.$queryRaw`SELECT 1`;
+    console.log('✅ Database connection verified\n');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('❌ DATABASE UNREACHABLE ON STARTUP:', msg);
+    console.error('   Check DATABASE_URL and Neon project status.\n');
+  }
 });

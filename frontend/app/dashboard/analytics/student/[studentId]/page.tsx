@@ -334,7 +334,7 @@ function InternalView({ data }: { data: typeof studentInternalMockData }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <ChartCard
                     title="Class Comparison"
-                    subtitle="You vs Class Average vs Topper"
+                    subtitle="You vs Class Average vs Highest"
                     icon={Users}
                     delay={0.3}
                     className="hover:scale-[1.01] transition-transform"
@@ -472,12 +472,12 @@ function InternalView({ data }: { data: typeof studentInternalMockData }) {
                     {...fadeUp(0.6)}
                     className="relative overflow-hidden bg-[#1C1C1A] rounded-4xl p-6 flex flex-col justify-between"
                 >
-                    <div className="text-[10px] font-black uppercase tracking-widest text-white/30 mb-3">Score Gap to Topper</div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-white/30 mb-3">Score Gap to Highest</div>
                     <div className="text-4xl font-serif font-bold text-white">
                         {(data.classComparison[2]?.value - data.internalScore).toFixed(1)}
                         <span className="text-lg text-white/30">%</span>
                     </div>
-                    <div className="text-xs text-white/30 mt-2">Topper at {data.classComparison[2]?.value}%</div>
+                    <div className="text-xs text-white/30 mt-2">Highest at {data.classComparison[2]?.value}%</div>
                     <div className="absolute bottom-0 right-0 w-24 h-24 bg-brand-green/10 rounded-full blur-2xl" />
                 </motion.div>
             </div>
@@ -813,7 +813,7 @@ function OverallView({ data }: { data: typeof studentOverallMockData }) {
             {/* Row 6: Peer Comparison (full width) */}
             <ChartCard
                 title="Peer Comparison"
-                subtitle="Your SGPA vs class average and topper across all semesters"
+                subtitle="Your SGPA vs class average and highest across all semesters"
                 icon={Users}
                 delay={0.55}
                 className="hover:scale-[1.005] transition-transform"
@@ -824,7 +824,7 @@ function OverallView({ data }: { data: typeof studentOverallMockData }) {
                     dataKeys={[
                         { key: "you",      color: "#3D8528", name: "You"          },
                         { key: "classAvg", color: "#3B82F6", name: "Class Average" },
-                        { key: "topper",   color: "#8B5CF6", name: "Topper"       },
+                        { key: "highest",   color: "#8B5CF6", name: "Highest"       },
                     ]}
                     xKey="semester"
                     height={260}

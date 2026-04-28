@@ -227,10 +227,10 @@ function AdminAnalyticsContent() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <ChartCard title="Top Performers" subtitle="Highest CGPA students" icon={Users} delay={0.5}
-                        action={<ExportButton data={d?.topPerformers || adminMockData.topPerformers} filename="top-performers" />}
+                    <ChartCard title="Branch Highest" subtitle="Highest CGPA students across branches" icon={Users} delay={0.5}
+                        action={<ExportButton data={d?.highestPerformers || adminMockData.highestPerformers} filename="highest-performers" />}
                     >
-                        <PerformersTable data={d?.topPerformers || adminMockData.topPerformers} type="top" />
+                        <PerformersTable data={d?.highestPerformers || adminMockData.highestPerformers} type="highest" />
                     </ChartCard>
 
                     <ChartCard title="Worst Performing Segments" subtitle="Branches with lowest pass rates" icon={AlertTriangle} delay={0.6}>

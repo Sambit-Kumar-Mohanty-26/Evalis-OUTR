@@ -133,8 +133,8 @@ function TeacherAnalyticsContent() {
             <div>
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#1C1C1A]/30 mb-6"><Shield size={14} /> Section C — Student Insights</div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <ChartCard title="Top Students" icon={Users} delay={0.1}>
-                        <PerformersTable data={d?.topStudents ?? []} type="top" valueLabel="Total" valueKey="total" />
+                    <ChartCard title="Branch Highest" icon={Users} delay={0.1}>
+                        <PerformersTable data={d?.highestStudents ?? []} type="highest" valueLabel="Total" valueKey="total" />
                     </ChartCard>
                     <ChartCard title="Weak Students" subtitle="Below pass threshold" icon={AlertTriangle} delay={0.2}>
                         <PerformersTable data={(d?.weakStudents ?? []).map((s: any, i: number) => ({ ...s, rank: i + 1 }))} type="bottom" valueLabel="Total" valueKey="total" />

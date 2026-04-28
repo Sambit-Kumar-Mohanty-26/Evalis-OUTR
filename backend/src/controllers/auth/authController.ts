@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db } from '../../config/db';
+import { db, withDbRetry } from '../../config/db';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import emailjs from '@emailjs/nodejs';
@@ -189,10 +189,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
-    const user = await db.user.findUnique({ 
-      where: { email },
-      include: { tenant: true }
-    });
+    const user = await withDbRetry(() =>
+      db.user.findUnique({ where: { email }, include: { tenant: true } })
+    );
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       res.status(401).json({ error: 'Credential mismatch.' });
       return;
@@ -254,8 +253,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       }
     });
   } catch (error) {
-    console.error('Login Error:', error);
-    res.status(500).json({ error: 'Login protocol failure' });
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Login Error:', message);
+    res.status(500).json({
+      error: 'Login protocol failure',
+      ...(process.env.NODE_ENV !== 'production' && { debug: message }),
+    });
   }
 };
 

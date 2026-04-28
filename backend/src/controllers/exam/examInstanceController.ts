@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { db } from '../../config/db';
 import { AuthRequest } from '../../middleware/authMiddleware';
+// trigger nodemon restart
 
 const p = (v: string | string[] | undefined): string => Array.isArray(v) ? v[0] : (v || '');
 
@@ -35,38 +36,74 @@ export const getExamInstances = async (req: AuthRequest, res: Response): Promise
 export const createExamInstance = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const adminUserId = req.user!.userId;
-        const { name, type, batchId, semester, scheduledDate, marksDeadline } = req.body;
+        const tenantId = req.user!.tenantId;
+        const { name, type, evaluationType, batchId, cohortName, semester, scheduledDate, marksDeadline } = req.body;
 
-        if (!name || !batchId || !semester) {
-            res.status(400).json({ error: 'name, batchId, and semester are required.' });
+        if (!name || (!batchId && !cohortName) || !semester) {
+            res.status(400).json({ error: 'name, batchId or cohortName, and semester are required.' });
             return;
         }
 
-        const instance = await db.examInstance.create({
-            data: {
-                name,
-                type: type || 'REGULAR',
-                batchId,
-                semester: parseInt(semester),
-                scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
-                marksDeadline: marksDeadline ? new Date(marksDeadline) : null,
-            },
-            include: {
-                batch: { select: { id: true, name: true } }
-            }
-        });
+        let batchesToProcess: any[] = [];
 
-        await db.auditLog.create({
-            data: {
-                userId: adminUserId,
-                action: 'CREATE',
-                entity: 'ExamInstance',
-                entityId: instance.id,
-                metadata: { name, type: instance.type, batchId, semester } as any
+        if (batchId) {
+            // Check if it is an actual batchId (length ~ 25 cuid) or cohort name
+            if (batchId.length > 10) {
+                const existingBatch = await db.batch.findUnique({ where: { id: batchId } });
+                if (existingBatch) batchesToProcess.push(existingBatch);
             }
-        });
+            
+            if (batchesToProcess.length === 0) {
+                // Assume it's a cohort name
+                const matchingBatches = await db.batch.findMany({
+                    where: { name: { contains: batchId }, isDeleted: false, academicYear: { tenantId } }
+                });
+                batchesToProcess = matchingBatches;
+            }
+        } else if (cohortName) {
+            const matchingBatches = await db.batch.findMany({
+                where: { name: { contains: cohortName }, isDeleted: false, academicYear: { tenantId } }
+            });
+            batchesToProcess = matchingBatches;
+        }
 
-        res.status(201).json(instance);
+        if (batchesToProcess.length === 0) {
+            res.status(404).json({ error: 'No matching batches found for this cohort selection.' });
+            return;
+        }
+
+        const createdInstances = [];
+        for (const b of batchesToProcess) {
+            const instance = await db.examInstance.create({
+                data: {
+                    name,
+                    type: type || 'REGULAR',
+                    // @ts-ignore
+                    evaluationType: evaluationType || 'INTERNAL',
+                    batchId: b.id,
+                    semester: parseInt(semester),
+                    scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+                    marksDeadline: marksDeadline ? new Date(marksDeadline) : null,
+                },
+                include: {
+                    batch: { select: { id: true, name: true } }
+                }
+            });
+            createdInstances.push(instance);
+
+            await db.auditLog.create({
+                data: {
+                    userId: adminUserId,
+                    action: 'CREATE',
+                    entity: 'ExamInstance',
+                    entityId: instance.id,
+                    // @ts-ignore
+                    metadata: { name, type: instance.type, evaluationType: instance.evaluationType, batchId: b.id, semester } as any
+                }
+            });
+        }
+
+        res.status(201).json(createdInstances.length === 1 ? createdInstances[0] : { instances: createdInstances });
     } catch (error) {
         console.error('Create Exam Instance Error:', error);
         res.status(500).json({ error: 'Failed to create exam instance.' });
@@ -159,5 +196,41 @@ export const publishResults = async (req: AuthRequest, res: Response): Promise<v
     } catch (error) {
         console.error('Publish Results Error:', error);
         res.status(500).json({ error: 'Failed to publish results.' });
+    }
+};
+
+// ─── DELETE EXAM INSTANCE ────────────────────────────────────────────────────
+export const deleteExamInstance = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const id = p(req.params.id);
+        const adminUserId = req.user!.userId;
+
+        const marksCount = await db.studentMark.count({ where: { examInstanceId: id } });
+        if (marksCount > 0) {
+            res.status(400).json({ error: 'Cannot delete exam instance because marks have already been recorded.' });
+            return;
+        }
+
+        await db.studentResult.deleteMany({ where: { examInstanceId: id } });
+        await db.studentSubMark.deleteMany({ where: { examInstanceId: id } });
+
+        await db.examInstance.delete({
+            where: { id }
+        });
+
+        await db.auditLog.create({
+            data: {
+                userId: adminUserId,
+                action: 'DELETE',
+                entity: 'ExamInstance',
+                entityId: id,
+                metadata: { note: 'Hard deleted by admin' } as any
+            }
+        });
+
+        res.json({ message: 'Exam instance deleted successfully.' });
+    } catch (error) {
+        console.error('Delete Exam Instance Error:', error);
+        res.status(500).json({ error: 'Failed to delete exam instance.' });
     }
 };

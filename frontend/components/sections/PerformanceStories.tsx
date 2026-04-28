@@ -14,7 +14,7 @@ const stories = [
     },
     {
         id: 2,
-        title: "Top Performing Batch Analysis",
+        title: "Branch Highest Performing Batch Analysis",
         description: "Discover the DNA of success. Compare historical admission batches side-by-side to understand which programs yield the highest academic excellence.",
         image: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=1000",
         metric: "2024",

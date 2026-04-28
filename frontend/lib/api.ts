@@ -1,5 +1,10 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
+// Timeout per request — 30s to tolerate slow connections
+const REQUEST_TIMEOUT_MS = 30_000;
+// Retries for network-level failures (not 4xx/5xx)
+const MAX_RETRIES = 2;
+
 type AuthHelpers = {
     getToken: () => string | null;
     refreshToken: () => Promise<string | null>;
@@ -14,6 +19,28 @@ let authHelpers: AuthHelpers = {
     },
     refreshToken: async () => null,
 };
+
+function isNetworkError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    const msg = err.message.toLowerCase();
+    return msg.includes("failed to fetch") || msg.includes("network") || err.name === "AbortError";
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } catch (err) {
+        if ((err as any)?.name === "AbortError") {
+            throw new Error("Request timed out. Check your connection and try again.");
+        }
+        throw err;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 class ApiClient {
     setAuthHelpers(helpers: AuthHelpers) {
         authHelpers = helpers;
@@ -28,19 +55,30 @@ class ApiClient {
 
     private async request<T = any>(
         endpoint: string,
-        options: RequestInit = {}
+        options: RequestInit = {},
+        attempt = 0
     ): Promise<T> {
         const token = authHelpers.getToken();
 
-        const res = await fetch(`${API_BASE}${endpoint}`, {
-            ...options,
-            credentials: "include",
-            headers: {
-                "Content-Type": "application/json",
-                ...(token && endpoint !== "/api/v1/auth/refresh" ? { Authorization: `Bearer ${token}` } : {}),
-                ...options.headers,
-            },
-        });
+        let res: Response;
+        try {
+            res = await fetchWithTimeout(`${API_BASE}${endpoint}`, {
+                ...options,
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token && endpoint !== "/api/v1/auth/refresh" ? { Authorization: `Bearer ${token}` } : {}),
+                    ...options.headers,
+                },
+            });
+        } catch (err) {
+            // Retry on network errors (dropped connection, timeout)
+            if (isNetworkError(err) && attempt < MAX_RETRIES) {
+                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+                return this.request<T>(endpoint, options, attempt + 1);
+            }
+            throw err;
+        }
 
         if (res.status === 401) {
             if (endpoint === "/api/v1/auth/refresh") {
@@ -67,7 +105,7 @@ class ApiClient {
             return new Promise((resolve, reject) => {
                 this.refreshSubscribers.push(async (newToken: string) => {
                     try {
-                        const retryRes = await fetch(`${API_BASE}${endpoint}`, {
+                        const retryRes = await fetchWithTimeout(`${API_BASE}${endpoint}`, {
                             ...options,
                             credentials: "include",
                             headers: {
@@ -122,7 +160,7 @@ class ApiClient {
     async upload<T = any>(endpoint: string, formData: FormData): Promise<T> {
         const token = authHelpers.getToken();
 
-        const res = await fetch(`${API_BASE}${endpoint}`, {
+        const res = await fetchWithTimeout(`${API_BASE}${endpoint}`, {
             method: "POST",
             credentials: "include",
             headers: {
@@ -134,7 +172,7 @@ class ApiClient {
         if (res.status === 401) {
             const newToken = await authHelpers.refreshToken();
             if (newToken) {
-                const retryRes = await fetch(`${API_BASE}${endpoint}`, {
+                const retryRes = await fetchWithTimeout(`${API_BASE}${endpoint}`, {
                     method: "POST",
                     credentials: "include",
                     headers: {

@@ -43,6 +43,7 @@ interface ExamInstance {
     id: string;
     name: string;
     type: string;
+    evaluationType: string;
     status: string;
     semester: number;
     scheduledDate: string | null;
@@ -90,6 +91,7 @@ export default function ExamsPage() {
     const [instanceName, setInstanceName] = useState("");
     const [instanceBatchId, setInstanceBatchId] = useState("");
     const [instanceSemester, setInstanceSemester] = useState<number>(1);
+    const [instanceEvaluationType, setInstanceEvaluationType] = useState("INTERNAL");
     const [instanceDeadline, setInstanceDeadline] = useState("");
     const [batches, setBatches] = useState<any[]>([]);
 
@@ -114,6 +116,21 @@ export default function ExamsPage() {
     const [marksBatchName, setMarksBatchName] = useState("");
     const [marksSchoolId, setMarksSchoolId] = useState("");
     const [marksBranchId, setMarksBranchId] = useState("");
+
+    useEffect(() => {
+        if (marksInstanceId) {
+            const selectedExam = instances.find((inst: any) => inst.id === marksInstanceId);
+            if (selectedExam) {
+                if (selectedExam.evaluationType === 'INTERNAL') {
+                    setMarksComponentId('INTERNAL_GROUP');
+                } else if (selectedExam.evaluationType === 'EXTERNAL') {
+                    setMarksComponentId('EXTERNAL_GROUP');
+                }
+            }
+        } else {
+            setMarksComponentId('');
+        }
+    }, [marksInstanceId, instances]);
 
     // Results Tab
     // Results Tab
@@ -373,6 +390,7 @@ export default function ExamsPage() {
                 name: instanceName,
                 batchId: instanceBatchId,
                 semester: instanceSemester,
+                evaluationType: instanceEvaluationType,
                 marksDeadline: instanceDeadline || null,
             });
             toast.success("Exam instance created!");
@@ -413,6 +431,24 @@ export default function ExamsPage() {
         } finally {
             setIsUpdatingStatus(null);
         }
+    };
+
+    const handleDeleteExamInstance = async (id: string) => {
+        toast.warning("Hard Delete Exam?", {
+            description: "Permanently remove the exam instance from the database.",
+            action: {
+                label: "Confirm",
+                onClick: async () => {
+                    try {
+                        await api.delete(`/api/v1/exam/instances/${id}`);
+                        toast.success("Exam instance hard deleted!");
+                        fetchInstances();
+                    } catch (err: any) {
+                        toast.error(err.message || "Failed to delete exam instance");
+                    }
+                }
+            }
+        });
     };
 
     const handlePublishResults = async (instanceId: string) => {
@@ -806,6 +842,14 @@ export default function ExamsPage() {
                                                         {isPublishing === inst.id ? "Publishing..." : "Publish"}
                                                     </button>
                                                     )}
+
+                                                    <button
+                                                        onClick={() => handleDeleteExamInstance(inst.id)}
+                                                        className="p-1.5 text-red-500 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center"
+                                                        title="Hard Delete Exam"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
                                                 </div>
                                             </div>
                                         </motion.div>
@@ -942,8 +986,9 @@ export default function ExamsPage() {
                                         <label className="text-[10px] font-black uppercase tracking-widest text-[#1C1C1A]/30 block ml-1">Evaluation Part</label>
                                         <select 
                                             value={marksComponentId}
+                                            disabled={!!marksInstanceId}
                                             onChange={(e) => setMarksComponentId(e.target.value)}
-                                            className="w-full px-4 py-2.5 rounded-xl border border-[#1C1C1A]/10 bg-white text-xs font-bold focus:outline-none focus:border-brand-green"
+                                            className="w-full px-4 py-2.5 rounded-xl border border-[#1C1C1A]/10 bg-white text-xs font-bold focus:outline-none focus:border-brand-green disabled:bg-[#1C1C1A]/5 disabled:text-[#1C1C1A]/40 disabled:cursor-not-allowed"
                                         >
                                             <option value="">Select Part</option>
                                             <option value="INTERNAL_GROUP">Internal Evaluations (Midsem, Quiz, Assign, Attd)</option>
@@ -1324,14 +1369,14 @@ export default function ExamsPage() {
                                         value={instanceBatchId}
                                         onChange={(e) => {
                                             setInstanceBatchId(e.target.value);
-                                            const selected = batches.find((b: any) => b.id === e.target.value);
+                                            const selected = batches.find((b: any) => getCohortName(b.name) === e.target.value);
                                             if (selected) setInstanceSemester(selected.currentSemester);
                                         }}
                                         className="w-full px-4 py-3 rounded-xl border border-[#1C1C1A]/10 bg-white text-sm focus:outline-none focus:border-brand-green"
                                     >
                                         <option value="">Select Batch</option>
-                                        {batches.filter((b: any) => b.status === 'ONGOING').map((b: any) => (
-                                            <option key={b.id} value={b.id}>{b.name} (Sem {b.currentSemester})</option>
+                                        {uniqueBatchNames.map((name: string) => (
+                                            <option key={name} value={name}>{name}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -1346,6 +1391,18 @@ export default function ExamsPage() {
                                         max={12}
                                         className="w-full px-4 py-3 rounded-xl border border-[#1C1C1A]/10 bg-white text-sm focus:outline-none focus:border-brand-green"
                                     />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-[#1C1C1A]/50 uppercase tracking-widest block mb-2">Evaluation Type</label>
+                                    <select
+                                        value={instanceEvaluationType}
+                                        onChange={(e) => setInstanceEvaluationType(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-xl border border-[#1C1C1A]/10 bg-white text-sm focus:outline-none focus:border-brand-green"
+                                    >
+                                        <option value="INTERNAL">Internal Evaluations (Midsem, Quiz, Assign, Attd)</option>
+                                        <option value="EXTERNAL">External Evaluation (End Semester)</option>
+                                    </select>
                                 </div>
 
                                 <div>

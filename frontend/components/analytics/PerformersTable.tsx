@@ -15,7 +15,7 @@ interface Performer {
 
 interface PerformersTableProps {
     data: Performer[];
-    type: "top" | "bottom";
+    type: "highest" | "bottom";
     valueLabel?: string;
     valueKey?: "cgpa" | "total";
 }
@@ -38,11 +38,11 @@ export function PerformersTable({
             {data.map((item, i) => (
                 <motion.div
                     key={item.roll}
-                    initial={{ opacity: 0, x: type === "top" ? -16 : 16 }}
+                    initial={{ opacity: 0, x: type === "highest" ? -16 : 16 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.06, duration: 0.4 }}
                     className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-200 hover:shadow-md ${
-                        type === "top"
+                        type === "highest"
                             ? "bg-white/60 border-[#1C1C1A]/5 hover:border-brand-green/20"
                             : "bg-red-50/50 border-red-100 hover:border-red-200"
                     }`}
@@ -50,7 +50,7 @@ export function PerformersTable({
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white shadow-sm border border-[#1C1C1A]/5">
                             {item.rank ? getRankIcon(item.rank) : (
-                                type === "top"
+                                type === "highest"
                                     ? <Trophy size={16} className="text-brand-green" />
                                     : <TrendingDown size={16} className="text-red-400" />
                             )}
@@ -67,7 +67,7 @@ export function PerformersTable({
                     </div>
                     <div className="text-right">
                         <div className={`text-lg font-serif font-bold ${
-                            type === "top" ? "text-brand-green" : "text-red-500"
+                            type === "highest" ? "text-brand-green" : "text-red-500"
                         }`}>
                             {item[valueKey] ?? "—"}
                         </div>

@@ -182,8 +182,8 @@ export const getAdminDeepInsights = async (req: Request, res: Response) => {
             .sort((a, b) => b.failRate - a.failRate)
             .slice(0, 8);
 
-        // Top performers
-        const topPerformers = await prisma.user.findMany({
+        // Highest performers
+        const highestPerformers = await prisma.user.findMany({
             where: { role: 'STUDENT', tenantId, isDeleted: false, cgpa: { not: null } },
             orderBy: { cgpa: 'desc' },
             take: 5,
@@ -217,15 +217,15 @@ export const getAdminDeepInsights = async (req: Request, res: Response) => {
         res.json({
             branchComparison,
             subjectDifficulty,
-            topPerformers: topPerformers.map((s, i) => ({
+            highestPerformers: highestPerformers.map((s, i) => ({
                 rank: i + 1, name: s.fullName, roll: s.rollNumber || '', branch: s.batch?.branch?.name || '', cgpa: s.cgpa,
             })),
             backlogDistribution: backlogDistribution.length ? backlogDistribution : [],
             worstSegments: worstSegments.length ? worstSegments : [],
             insights: [
                 subjectDifficulty.length > 0 ? `${subjectDifficulty[0].subject} has the highest failure rate at ${subjectDifficulty[0].failRate}%.` : 'No significant subject failure spikes detected.',
-                branchComparison.length > 0 ? `${branchComparison.sort((a,b) => b.passRate - a.passRate)[0].branch} is the top performing branch.` : '',
-                `Top performer ${topPerformers[0]?.fullName || 'N/A'} leads with a CGPA of ${topPerformers[0]?.cgpa || 0}.`,
+                branchComparison.length > 0 ? `${branchComparison.sort((a,b) => b.passRate - a.passRate)[0].branch} is the Branch Highest performing branch.` : '',
+                `Branch highest ${highestPerformers[0]?.fullName || 'N/A'} leads with a CGPA of ${highestPerformers[0]?.cgpa || 0}.`,
             ].filter(Boolean),
         });
     } catch (error) {
@@ -319,8 +319,8 @@ export const getHosSchoolOverview = async (req: Request, res: Response) => {
             return { branch: b.name, passRate: total ? Math.round((passed / total) * 100) : 0, students: 0 };
         });
 
-        // Top/Bottom students in school
-        const topStudents = await prisma.user.findMany({
+        // Highest/Bottom students in school
+        const highestStudents = await prisma.user.findMany({
             where: { batch: { branch: { schoolId: school.id } }, role: 'STUDENT', isDeleted: false },
             orderBy: { cgpa: 'desc' },
             take: 5,
@@ -370,9 +370,9 @@ export const getHosSchoolOverview = async (req: Request, res: Response) => {
             };
         }));
 
-        // Top failure subject calculation
+        // Highest failure subject calculation
         const allSubjects = branches.flatMap(b => b.semesters.flatMap(s => s.subjects));
-        const topFailureRate = allSubjects.length > 0 
+        const highestFailureRate = allSubjects.length > 0 
             ? Math.max(...allSubjects.map(sub => {
                 const total = sub.results.length;
                 const failed = sub.results.filter(r => r.status === 'FAILED' || r.status === 'BACKLOG').length;
@@ -382,14 +382,14 @@ export const getHosSchoolOverview = async (req: Request, res: Response) => {
 
         res.json({ 
             branchPerformance,
-            topStudents: topStudents.map((s, i) => ({ rank: i + 1, name: s.fullName, roll: s.rollNumber || '', branch: s.batch?.branch?.name || '', cgpa: s.cgpa })),
+            highestStudents: highestStudents.map((s, i) => ({ rank: i + 1, name: s.fullName, roll: s.rollNumber || '', branch: s.batch?.branch?.name || '', cgpa: s.cgpa })),
             bottomStudents: bottomStudents.map((s, i) => ({ rank: i + 1, name: s.fullName, roll: s.rollNumber || '', branch: s.batch?.branch?.name || '', cgpa: s.cgpa })),
             backlogHeatmap: heatmapData,
             passTrend: passTrend,
-            topFailureRate,
+            highestFailureRate,
             insights: [
                 `${school.name} has an average pass rate of ${branchPerformance.length ? (branchPerformance.reduce((a,b) => a + b.passRate, 0) / branchPerformance.length).toFixed(1) : 0}%.`,
-                branchPerformance.length > 0 ? `${branchPerformance.sort((a,b) => b.passRate - a.passRate)[0].branch} branch is currently leading in performance.` : '',
+                branchPerformance.length > 0 ? `${branchPerformance.sort((a,b) => b.passRate - a.passRate)[0].branch} branch is currently the Branch Highest performing.` : '',
                 heatmapData.length > 0 && heatmapData.some(h => h.failRate > 30) ? `Critical failure intensity detected in ${heatmapData.find(h => h.failRate > 30)?.subject}.` : 'No critical subject hotspots detected.',
             ]
         });
@@ -556,7 +556,7 @@ export const getTeacherClassPerformance = async (req: Request, res: Response) =>
             else marksBuckets['80-100']++;
         });
 
-        const topStudents = await prisma.user.findMany({
+        const highestStudents = await prisma.user.findMany({
             where: { 
                 role: 'STUDENT', 
                 isDeleted: false,
@@ -600,7 +600,7 @@ export const getTeacherClassPerformance = async (req: Request, res: Response) =>
                 { range: '60–80', count: marksBuckets['60-80'], fill: '#3D8528' },
                 { range: '80–100', count: marksBuckets['80-100'], fill: '#10B981' },
             ],
-            topStudents: topStudents.map((s: any, i: number) => ({ rank: i + 1, name: s.fullName, roll: s.rollNumber || '', total: s.results.reduce((acc: number, curr: any) => acc + curr.totalMarks, 0) })),
+            highestStudents: highestStudents.map((s: any, i: number) => ({ rank: i + 1, name: s.fullName, roll: s.rollNumber || '', total: s.results.reduce((acc: number, curr: any) => acc + curr.totalMarks, 0) })),
             weakStudents: weakStudents.map((s: any, i: number) => ({ rank: i + 1, name: s.fullName, roll: s.rollNumber || '', total: s.results.reduce((acc: number, curr: any) => acc + curr.totalMarks, 0) })),
             insights: [
                 `Class average for this subject is ${avgScore.toFixed(1)}/100.`,
@@ -727,7 +727,7 @@ export const getStudentComparison = async (req: Request, res: Response) => {
             percentile,
             insights: [
                 `You are ranked ${rank} out of ${totalStudents} students in your batch.`,
-                `You are in the top ${Math.round(100 - percentile)}% of your class.`,
+                `You are in the highest ${Math.round(100 - percentile)}% of your class.`,
             ]
         });
     } catch (error) {
@@ -895,7 +895,7 @@ export const getStudentOverallDetail = async (req: Request, res: Response) => {
                 semester: `Sem ${r.semesterNumber}`,
                 you: r.sgpa,
                 classAvg: semPeer[r.semesterNumber] ? parseFloat((semPeer[r.semesterNumber].sum / semPeer[r.semesterNumber].cnt).toFixed(2)) : 0,
-                topper: semPeer[r.semesterNumber]?.max ?? r.sgpa,
+                highest: semPeer[r.semesterNumber]?.max ?? r.sgpa,
             }));
         }
 

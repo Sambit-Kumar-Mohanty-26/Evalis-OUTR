@@ -46,7 +46,7 @@ export const adminMockData = {
         { semester: "Sem 5", zero: 170, one: 42, twoPlus: 12 },
         { semester: "Sem 6", zero: 175, one: 38, twoPlus: 10 },
     ],
-    topPerformers: [
+    highestPerformers: [
         { rank: 1, name: "Aditya Sharma", roll: "CSE2023001", branch: "CSE", cgpa: 9.82 },
         { rank: 2, name: "Priya Patel", roll: "IT2023015", branch: "IT", cgpa: 9.71 },
         { rank: 3, name: "Rahul Kumar", roll: "CSE2023008", branch: "CSE", cgpa: 9.65 },
@@ -126,7 +126,7 @@ export const hosMockData = {
         { subject: "Signals & Systems", failRate: 31 },
         { subject: "Digital Electronics", failRate: 28 },
     ],
-    topStudents: [
+    highestStudents: [
         { name: "Aditya Sharma", roll: "CSE2023001", cgpa: 9.82, branch: "CSE" },
         { name: "Sneha Reddy", roll: "CSE2023003", cgpa: 9.65, branch: "CSE" },
         { name: "Priya Patel", roll: "IT2023015", cgpa: 9.71, branch: "IT" },
@@ -233,7 +233,7 @@ export const teacherMockData = {
         { component: "Mid Sem", avg: 14.5, max: 20 },
         { component: "End Sem", avg: 32.8, max: 60 },
     ],
-    topStudents: [
+    highestStudents: [
         { rank: 1, name: "Aditya Sharma", roll: "CSE2023001", total: 94 },
         { rank: 2, name: "Priya Patel", roll: "CSE2023015", total: 91 },
         { rank: 3, name: "Rahul Kumar", roll: "CSE2023008", total: 88 },
@@ -298,7 +298,7 @@ export const studentInternalMockData = {
     classComparison: [
         { category: "You", value: 76.4, fill: "#3D8528" },
         { category: "Class Avg", value: 62.1, fill: "#3B82F6" },
-        { category: "Topper", value: 94.2, fill: "#8B5CF6" },
+        { category: "Branch Highest", value: 94.2, fill: "#8B5CF6" },
     ],
 
     subjectRanks: [
@@ -413,11 +413,11 @@ export const studentOverallMockData = {
     ],
 
     peerComparison: [
-        { semester: "Sem 1", you: 8.2, classAvg: 7.1, topper: 9.4 },
-        { semester: "Sem 2", you: 7.8, classAvg: 6.9, topper: 9.6 },
-        { semester: "Sem 3", you: 8.5, classAvg: 7.2, topper: 9.8 },
-        { semester: "Sem 4", you: 8.9, classAvg: 7.4, topper: 9.9 },
-        { semester: "Sem 5", you: 9.1, classAvg: 7.6, topper: 10.0 },
+        { semester: "Sem 1", you: 8.2, classAvg: 7.1, highest: 9.4 },
+        { semester: "Sem 2", you: 7.8, classAvg: 6.9, highest: 9.6 },
+        { semester: "Sem 3", you: 8.5, classAvg: 7.2, highest: 9.8 },
+        { semester: "Sem 4", you: 8.9, classAvg: 7.4, highest: 9.9 },
+        { semester: "Sem 5", you: 9.1, classAvg: 7.6, highest: 10.0 },
     ],
 
     performanceHeatmap: [

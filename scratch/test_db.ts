@@ -1,5 +1,5 @@
 
-import { db } from '../src/config/db';
+import { db } from '../backend/src/config/db';
 
 async function testConnection() {
     try {

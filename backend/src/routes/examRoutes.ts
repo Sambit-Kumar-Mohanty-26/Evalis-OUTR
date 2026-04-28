@@ -12,6 +12,7 @@ import {
     createExamInstance,
     updateExamStatus,
     publishResults,
+    deleteExamInstance,
 } from '../controllers/exam/examInstanceController';
 import {
     enterMarks,
@@ -46,6 +47,7 @@ router.get('/instances', getExamInstances);
 router.post('/instances', authorize('ADMIN', 'HEAD_OF_SCHOOL'), createExamInstance);
 router.put('/instances/:id/status', authorize('ADMIN', 'HEAD_OF_SCHOOL'), updateExamStatus);
 router.post('/instances/:id/publish', authorize('ADMIN', 'HEAD_OF_SCHOOL'), publishResults);
+router.delete('/instances/:id', authorize('ADMIN', 'HEAD_OF_SCHOOL'), deleteExamInstance);
 
 // ─── MARKS ENTRY (Teacher + Advisor + HOS + Admin) ──────────────────────────
 router.post('/marks', authorize('TEACHER', 'ADVISOR', 'HEAD_OF_SCHOOL', 'ADMIN'), enterMarks);

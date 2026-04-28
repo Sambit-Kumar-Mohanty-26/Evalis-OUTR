@@ -133,7 +133,7 @@ export const getTeacherSubjectStats = async (req: AuthRequest, res: Response): P
             totalResults: results.length,
             passPercent: getPassPercent(results.map(r => ({ status: r.status }))),
             avgMarks,
-            topStudents: results.slice(0, 5).map(r => ({
+            highestStudents: results.slice(0, 5).map(r => ({
                 name: (r as any).student?.fullName,
                 rollNumber: (r as any).student?.rollNumber,
                 marks: r.totalMarks,
