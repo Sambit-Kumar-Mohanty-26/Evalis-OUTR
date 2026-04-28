@@ -65,7 +65,7 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
         const tenantId = req.user!.tenantId;
         const {
             role, search, schoolId, branchId, batchId, batchYear,
-            status, page = '1', limit = '20'
+            status, sortBy, sortOrder = 'desc', page = '1', limit = '20'
         } = req.query as Record<string, string>;
 
         const where: any = {
@@ -94,7 +94,6 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
             if (branch?.orgNodeId) {
                 where.managedNodes = { some: { id: branch.orgNodeId } };
             } else {
-                // Fallback for safety or if not mapped
                 where.managedNodes = { some: { id: branchId } };
             }
         } else if (schoolId) {
@@ -108,6 +107,13 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
         const take = parseInt(limit);
+
+        let orderBy: any = { createdAt: 'desc' };
+        if (sortBy === 'cgpa') {
+            orderBy = { cgpa: sortOrder };
+        } else if (sortBy === 'fullName') {
+            orderBy = { fullName: sortOrder };
+        }
 
         const [users, total] = await Promise.all([
             db.user.findMany({
@@ -129,7 +135,7 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
                 },
                 skip,
                 take,
-                orderBy: { createdAt: 'desc' },
+                orderBy,
             }),
             db.user.count({ where }),
         ]);

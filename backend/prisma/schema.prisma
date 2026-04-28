@@ -292,6 +292,7 @@ model ExamInstance {
   id            String     @id @default(cuid())
   name          String     // e.g., "Mid Sem Oct 2024"
   type          String     @default("REGULAR") // REGULAR, BACK_PAPER
+  evaluationType String     @default("INTERNAL") // INTERNAL, EXTERNAL
   status        ExamStatus @default(DRAFT)
 
   batchId       String

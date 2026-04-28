@@ -109,10 +109,20 @@ export const getAdminOverview = async (req: Request, res: Response) => {
             _avg: { cgpa: true },
         });
 
+        const totalFaculty = await prisma.user.count({ 
+            where: { role: 'TEACHER', tenantId, isDeleted: false } 
+        });
+
+        const totalPrograms = await prisma.program.count({ 
+            where: { isDeleted: false } 
+        });
+
         res.json({
             passRate: total ? parseFloat(((passed / total) * 100).toFixed(1)) : 0,
             failRate: total ? parseFloat(((failed / total) * 100).toFixed(1)) : 0,
             totalStudents,
+            totalFaculty,
+            totalPrograms,
             avgCgpa: avgCgpaResult._avg.cgpa || 0,
             sgpaDistribution: [
                 { range: '0–4', count: sgpaBuckets['0-4'], fill: '#EF4444' },

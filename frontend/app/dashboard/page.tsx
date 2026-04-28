@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { KpiCard } from "@/components/dashboard/KpiCard";
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/Button";
+import { api } from "@/lib/api";
 
 const ROLE_REDIRECT: Record<string, string> = {
     HEAD_OF_SCHOOL: '/dashboard/hos',
@@ -30,6 +31,8 @@ const ROLE_REDIRECT: Record<string, string> = {
 export default function DashboardOverview() {
     const { user } = useAuth();
     const router = useRouter();
+    const [stats, setStats] = useState<any>(null);
+    const [loadingStats, setLoadingStats] = useState(true);
 
     useEffect(() => {
         if (user?.role && ROLE_REDIRECT[user.role]) {
@@ -37,8 +40,24 @@ export default function DashboardOverview() {
         }
     }, [user?.role, router]);
 
+    useEffect(() => {
+        if (user?.role === "ADMIN") {
+            setLoadingStats(true);
+            api.get("/api/v1/analytics/admin/overview")
+                .then((data: any) => setStats(data))
+                .catch((err: any) => console.error(err))
+                .finally(() => setLoadingStats(false));
+        } else {
+            setLoadingStats(false);
+        }
+    }, [user]);
+
     // Show spinner while redirecting non-admin roles
     if (user?.role && ROLE_REDIRECT[user.role]) {
+        return <div className="flex items-center justify-center h-full py-32"><Loader2 className="animate-spin text-brand-green" size={32} /></div>;
+    }
+
+    if (loadingStats) {
         return <div className="flex items-center justify-center h-full py-32"><Loader2 className="animate-spin text-brand-green" size={32} /></div>;
     }
 
@@ -116,32 +135,29 @@ export default function DashboardOverview() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <KpiCard 
                     title="Total Students" 
-                    value="12,408" 
+                    value={stats?.totalStudents?.toLocaleString() || "0"} 
                     icon={Users} 
-                    trend={{ value: "+4.2%", isUp: true }}
-                    description="vs last semester"
+                    description="Active student roster"
                     delay={0.1}
                 />
                 <KpiCard 
                     title="Faculty Members" 
-                    value="482" 
+                    value={stats?.totalFaculty?.toLocaleString() || "0"} 
                     icon={GraduationCap} 
-                    trend={{ value: "+12", isUp: true }}
-                    description="Recently onboarded"
+                    description="Teaching staff"
                     delay={0.2}
                 />
                 <KpiCard 
                     title="Active Programs" 
-                    value="24" 
+                    value={stats?.totalPrograms?.toLocaleString() || "0"} 
                     icon={BookOpen} 
-                    description="B.Tech, MCA, MBA"
+                    description="Degrees & Blueprints"
                     delay={0.3}
                 />
                 <KpiCard 
                     title="Avg CGPA" 
-                    value="8.42" 
+                    value={stats?.avgCgpa ? Number(stats.avgCgpa).toFixed(2) : "0.00"} 
                     icon={ClipboardCheck} 
-                    trend={{ value: "+0.12", isUp: true }}
                     description="Institutional aggregate"
                     delay={0.4}
                 />
@@ -153,24 +169,37 @@ export default function DashboardOverview() {
                 <div className="lg:col-span-2 p-10 bg-white/40 backdrop-blur-md rounded-[40px] border border-[#1C1C1A]/5">
                     <div className="flex justify-between items-center mb-10">
                         <h2 className="text-2xl font-serif text-[#1C1C1A]">Performance Snapshot</h2>
-                        <button className="text-xs font-bold text-[#1C1C1A]/40 hover:text-brand-green transition-colors uppercase tracking-widest">View Detailed Specs</button>
+                        <button className="text-xs font-bold text-[#1C1C1A]/40 hover:text-brand-green transition-colors uppercase tracking-widest">Avg CGPA Trend</button>
                     </div>
                     
-                    {/* Simulated Visualization */}
-                    <div className="h-[300px] flex items-end gap-3 px-4">
-                        {[65, 80, 45, 90, 70, 85, 60, 95].map((height, i) => (
-                            <motion.div 
-                                key={i}
-                                initial={{ height: 0 }}
-                                animate={{ height: `${height}%` }}
-                                transition={{ delay: 0.5 + (i * 0.1), duration: 1, ease: [0.16, 1, 0.3, 1] }}
-                                className="flex-1 bg-gradient-to-t from-brand-green/40 to-brand-green/10 rounded-t-2xl relative group cursor-pointer"
-                            >
-                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-[#1C1C1A] text-white text-[10px] py-1 px-2 rounded-md font-bold">
-                                    {height}%
-                                </div>
-                            </motion.div>
-                        ))}
+                    {/* Real Visualization */}
+                    <div className="h-[300px] flex items-end gap-6 px-4 pb-6">
+                        {stats?.cgpaTrend && stats.cgpaTrend.length > 0 ? (
+                            stats.cgpaTrend.map((item: any, i: number) => {
+                                const height = item.cgpa ? (item.cgpa / 10) * 100 : 0;
+                                return (
+                                    <motion.div 
+                                        key={i}
+                                        initial={{ height: 0 }}
+                                        animate={{ height: `${height}%` }}
+                                        transition={{ delay: 0.5 + (i * 0.1), duration: 1, ease: [0.16, 1, 0.3, 1] }}
+                                        className="flex-1 bg-gradient-to-t from-brand-green/40 to-brand-green/10 rounded-t-2xl relative group cursor-pointer"
+                                    >
+                                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-[#1C1C1A] text-white text-[10px] py-1 px-2 rounded-md font-bold">
+                                            {item.cgpa} GPA
+                                        </div>
+                                        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[10px] font-bold text-[#1C1C1A]/40 whitespace-nowrap uppercase tracking-widest">
+                                            {item.semester}
+                                        </div>
+                                    </motion.div>
+                                );
+                            })
+                        ) : (
+                            <div className="flex flex-col items-center justify-center w-full h-full text-[#1C1C1A]/30 gap-2">
+                                <AlertCircle size={24} strokeWidth={1.5} />
+                                <span className="text-xs font-bold uppercase tracking-wider">No snapshot data recorded yet</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -181,13 +210,14 @@ export default function DashboardOverview() {
                         <h2 className="text-xl font-serif text-[#1C1C1A] mb-8">Interventions</h2>
                         <div className="grid grid-cols-2 gap-4">
                             {[
-                                { text: "Add Student", icon: UserPlus },
-                                { text: "Add Teacher", icon: Plus },
-                                { text: "Create Exam", icon: FilePlus },
-                                { text: "Upload CSV", icon: Upload },
+                                { text: "Add Student", icon: UserPlus, href: "/dashboard/users?tab=students&action=add" },
+                                { text: "Add Teacher", icon: Plus, href: "/dashboard/users?tab=teachers&action=add" },
+                                { text: "Create Exam", icon: FilePlus, href: "/dashboard/exams?tab=instances&action=new" },
+                                { text: "Upload CSV", icon: Upload, href: "/dashboard/users?tab=students&action=upload" },
                             ].map((action) => (
                                 <button 
                                     key={action.text}
+                                    onClick={() => router.push(action.href)}
                                     className="p-4 rounded-3xl bg-white border border-[#1C1C1A]/5 flex flex-col items-center gap-3 hover:bg-[#1C1C1A] hover:text-white transition-all duration-500 group"
                                 >
                                     <action.icon size={20} className="group-hover:scale-110 transition-transform" />

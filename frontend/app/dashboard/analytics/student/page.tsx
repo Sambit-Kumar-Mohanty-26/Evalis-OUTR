@@ -17,6 +17,7 @@ interface UserRecord {
     rollNumber: string | null;
     currentSemester: number | null;
     status: string;
+    cgpa?: number | null;
     batch: {
         id: string;
         name: string;
@@ -59,6 +60,10 @@ export default function StudentAnalyticsListPage() {
     const [filterBatchYear, setFilterBatchYear] = useState("");
     const [filterBatch, setFilterBatch] = useState("");
     const [filterStatus, setFilterStatus] = useState("all");
+    
+    // Sorting
+    const [sortBy, setSortBy] = useState("");
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
     // Search debounce
     const searchTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -88,6 +93,8 @@ export default function StudentAnalyticsListPage() {
             if (filterBatch) params.set("batchId", filterBatch);
             if (filterBatchYear) params.set("batchYear", filterBatchYear);
             if (filterStatus !== "all") params.set("status", filterStatus);
+            if (sortBy) params.set("sortBy", sortBy);
+            if (sortOrder) params.set("sortOrder", sortOrder);
             params.set("page", String(page));
             params.set("limit", String(limit));
 
@@ -100,10 +107,10 @@ export default function StudentAnalyticsListPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [debouncedSearch, filterSchool, filterBranch, filterBatch, filterBatchYear, filterStatus, page, limit]);
+    }, [debouncedSearch, filterSchool, filterBranch, filterBatch, filterBatchYear, filterStatus, sortBy, sortOrder, page, limit]);
 
     useEffect(() => { fetchStudents(); }, [fetchStudents]);
-    useEffect(() => { setPage(1); }, [debouncedSearch, filterSchool, filterBranch, filterBatch, filterBatchYear, filterStatus]);
+    useEffect(() => { setPage(1); }, [debouncedSearch, filterSchool, filterBranch, filterBatch, filterBatchYear, filterStatus, sortBy, sortOrder]);
 
     const clearFilters = () => {
         setFilterSchool("");
@@ -111,6 +118,8 @@ export default function StudentAnalyticsListPage() {
         setFilterBatchYear("");
         setFilterBatch("");
         setFilterStatus("all");
+        setSortBy("");
+        setSortOrder("desc");
     };
 
     const hasActiveFilters = filterSchool || filterBranch || filterBatch || filterBatchYear || filterStatus !== "all";
@@ -261,6 +270,27 @@ export default function StudentAnalyticsListPage() {
                                         { value: "INACTIVE", label: "Inactive" },
                                     ]}
                                 />
+
+                                <FilterSelect
+                                    label="Sort By"
+                                    value={sortBy ? `${sortBy}-${sortOrder}` : ""}
+                                    onChange={(v) => {
+                                        if (v === "cgpa-desc") {
+                                            setSortBy("cgpa");
+                                            setSortOrder("desc");
+                                        } else if (v === "cgpa-asc") {
+                                            setSortBy("cgpa");
+                                            setSortOrder("asc");
+                                        } else {
+                                            setSortBy("");
+                                            setSortOrder("desc");
+                                        }
+                                    }}
+                                    options={[
+                                        { value: "cgpa-desc", label: "Highest CGPA first" },
+                                        { value: "cgpa-asc", label: "Lowest CGPA first" },
+                                    ]}
+                                />
                             </div>
                         </div>
                     </motion.div>
@@ -296,6 +326,7 @@ export default function StudentAnalyticsListPage() {
                                     <Th>Branch</Th>
                                     <Th>Batch</Th>
                                     <Th>Semester</Th>
+                                    <Th>CGPA</Th>
                                     <Th align="right">Action</Th>
                                 </tr>
                             </thead>
@@ -334,6 +365,11 @@ export default function StudentAnalyticsListPage() {
                                                     Sem {u.currentSemester}
                                                 </span>
                                             ) : "—"}
+                                        </Td>
+                                        <Td>
+                                            <span className="font-bold text-brand-green font-mono text-xs">
+                                                {u.cgpa ? Number(u.cgpa).toFixed(2) : "—"}
+                                            </span>
                                         </Td>
                                         <Td align="right">
                                             <div className="flex justify-end">

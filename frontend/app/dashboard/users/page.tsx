@@ -109,6 +109,21 @@ export default function UsersPage() {
         return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
     }, [search]);
 
+    useEffect(() => {
+        const searchParams = new URLSearchParams(window.location.search);
+        const tab = searchParams.get("tab");
+        const action = searchParams.get("action");
+
+        if (tab === "students" || tab === "teachers" || tab === "admin") {
+            setActiveTab(tab);
+        }
+        if (action === "add") {
+            setShowAddModal(true);
+        } else if (action === "upload") {
+            setShowBulkModal(true);
+        }
+    }, []);
+
     // ─── Fetch Metadata ──────────────────────────────────────────────────────
     useEffect(() => {
         api.get("/api/v1/user/metadata").then(setMetadata).catch(console.error);

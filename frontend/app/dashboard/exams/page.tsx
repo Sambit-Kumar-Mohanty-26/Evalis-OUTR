@@ -252,6 +252,19 @@ export default function ExamsPage() {
     }, []);
 
     useEffect(() => {
+        const searchParams = new URLSearchParams(window.location.search);
+        const tab = searchParams.get("tab");
+        const action = searchParams.get("action");
+
+        if (tab === "schemas" || tab === "instances" || tab === "marks" || tab === "results") {
+            setActiveTab(tab);
+        }
+        if (action === "new") {
+            setShowInstanceCreator(true);
+        }
+    }, []);
+
+    useEffect(() => {
         Promise.all([
             fetchSchemas(), 
             fetchInstances(), 
